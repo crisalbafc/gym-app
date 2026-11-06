@@ -3,7 +3,7 @@
 App web para el móvil: registro de entrenos, dieta, peso corporal, gráficas de progreso y grupo de amigos con récords compartidos.
 
 - Abrir: https://crisalbafc.github.io/gym-app/
-- Base de datos: Supabase (crear tablas con `supabase/schema.sql`).
+- Base de datos: Supabase (ejecutar `supabase/schema.sql` y luego `supabase/002-fotos.sql`).
 - Probar en local: `npm install` y `npm run dev`.
 - Publicar cambios: `npm run deploy`.
 

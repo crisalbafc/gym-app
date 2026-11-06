@@ -1,11 +1,68 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Users, Share2, Trophy, LogOut, ChevronDown, Copy } from 'lucide-react'
+import { Users, Share2, Trophy, LogOut, ChevronDown, Copy, Camera } from 'lucide-react'
+import { photoUrls } from '../lib/photos'
 import { supabase } from '../supabase'
 import { useApp } from '../App'
 import type { Exercise } from '../types'
 import { Button, Card, Empty, ErrorText, Input, SectionTitle } from '../components/ui'
 import { ExercisePicker } from './Workout'
 import { errMsg, fmtDate, round } from '../lib/utils'
+
+type FeedItem = {
+  workout_id: string; display_name: string; workout_name: string | null; started_at: string
+  photo_path: string; sets: number; volume: number; is_me: boolean
+}
+
+function GroupPhotos() {
+  const [items, setItems] = useState<FeedItem[] | null>(null)
+  const [urls, setUrls] = useState<Record<string, string>>({})
+  const [big, setBig] = useState<string | null>(null)
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.rpc('group_photo_feed')
+      const list = (data as FeedItem[]) || []
+      setItems(list)
+      setUrls(await photoUrls(list.map((i) => i.photo_path)))
+    })()
+  }, [])
+
+  return (
+    <>
+      <SectionTitle>Fotos del grupo</SectionTitle>
+      {items === null ? <Empty>Cargando…</Empty> : items.length === 0 ? (
+        <Card><p className="text-sm text-zinc-400 flex gap-2"><Camera size={18} className="shrink-0" />Aún no hay fotos. Al terminar un entreno podrás hacerte una y la verá todo el grupo.</p></Card>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          {items.map((i) => (
+            <button key={i.workout_id} onClick={() => urls[i.photo_path] && setBig(i.workout_id)} className="text-left rounded-2xl overflow-hidden bg-zinc-900 border border-zinc-800">
+              {urls[i.photo_path]
+                ? <img src={urls[i.photo_path]} alt={`Foto de ${i.display_name}`} loading="lazy" className="w-full aspect-square object-cover" />
+                : <div className="w-full aspect-square bg-zinc-800" />}
+              <div className="p-2">
+                <div className="text-sm font-semibold truncate">{i.is_me ? 'Tú' : i.display_name}</div>
+                <div className="text-xs text-zinc-500 truncate">{fmtDate(i.started_at)} · {i.sets} series · {round(+i.volume).toLocaleString('es-ES')} kg</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+      {big && (() => {
+        const i = items!.find((x) => x.workout_id === big)!
+        return (
+          <div className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4" onClick={() => setBig(null)}>
+            <img src={urls[i.photo_path]} alt={`Foto de ${i.display_name}`} className="max-h-[75vh] max-w-full rounded-2xl object-contain" />
+            <div className="mt-3 text-center">
+              <div className="font-bold">{i.is_me ? 'Tú' : i.display_name}{i.workout_name ? ` · ${i.workout_name}` : ''}</div>
+              <div className="text-sm text-zinc-400">{fmtDate(i.started_at, { weekday: 'long', day: 'numeric', month: 'long' })} · {i.sets} series · {round(+i.volume).toLocaleString('es-ES')} kg</div>
+              <div className="text-xs text-zinc-500 mt-2">Toca para cerrar</div>
+            </div>
+          </div>
+        )
+      })()}
+    </>
+  )
+}
 
 type G = { id: string; name: string; invite_code: string }
 type Person = { user_id: string; display_name: string }
@@ -126,6 +183,8 @@ export default function Group() {
           </Card>
         </>
       )}
+
+      {groups.length > 0 && <GroupPhotos />}
 
       <SectionTitle>{groups.length ? 'Otro grupo' : 'Empieza aquí'}</SectionTitle>
       <Card className="space-y-3">

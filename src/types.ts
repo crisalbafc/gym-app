@@ -9,7 +9,10 @@ export type Profile = {
   rest_seconds: number
 }
 export type Exercise = { id: string; user_id: string | null; name: string; muscle: string }
-export type Workout = { id: string; name: string | null; started_at: string; ended_at: string | null }
+export type Workout = {
+  id: string; name: string | null; started_at: string; ended_at: string | null
+  photo_path?: string | null; photo_shared?: boolean
+}
 export type WorkoutSet = {
   id: string; workout_id: string; exercise_id: string; weight: number; reps: number; created_at: string
 }

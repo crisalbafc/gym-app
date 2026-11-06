@@ -5,6 +5,9 @@ import { useApp } from '../App'
 import type { Exercise, Template, Workout, WorkoutSet } from '../types'
 import { Button, Card, Empty, ErrorText, Input, SectionTitle, Sheet, Stepper } from '../components/ui'
 import { errMsg, fmtDate, kg, num, round } from '../lib/utils'
+import { FinishSheet, HistoryPhoto } from '../components/WorkoutPhoto'
+import { deletePhotoFile } from '../lib/photos'
+import { Camera } from 'lucide-react'
 
 const pendingKey = (id: string) => `wo-pending-${id}`
 function readPending(id: string): string[] {
@@ -63,6 +66,7 @@ function Idle({ onStarted }: { onStarted: (w: Workout) => void }) {
   }
   async function removeWorkout(w: Workout) {
     if (!confirm('¿Borrar este entreno y todas sus series?')) return
+    if (w.photo_path) await deletePhotoFile(w.photo_path)
     await supabase.from('workouts').delete().eq('id', w.id)
     load()
   }
@@ -110,13 +114,15 @@ function Idle({ onStarted }: { onStarted: (w: Workout) => void }) {
             <Card key={w.id} className="!p-0">
               <button className="w-full p-4 flex items-center gap-3 text-left" onClick={() => setOpen(isOpen ? null : w.id)}>
                 <div className="flex-1">
-                  <div className="font-semibold">{w.name || 'Entreno'} · <span className="text-zinc-400 font-normal">{fmtDate(w.started_at, { weekday: 'short', day: 'numeric', month: 'short' })}</span></div>
+                  <div className="font-semibold flex items-center gap-1.5">{w.name || 'Entreno'} · <span className="text-zinc-400 font-normal">{fmtDate(w.started_at, { weekday: 'short', day: 'numeric', month: 'short' })}</span>
+                    {w.photo_path && <Camera size={14} className="text-accent" aria-label="Tiene foto" />}</div>
                   <div className="text-xs text-zinc-500">{byEx.length} ejercicios · {sets.length} series · {round(vol).toLocaleString('es-ES')} kg de volumen</div>
                 </div>
                 {isOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
               </button>
               {isOpen && (
                 <div className="px-4 pb-4 space-y-3">
+                  <HistoryPhoto workout={w} onChange={load} />
                   {byEx.map(([exId, ss]) => (
                     <div key={exId}>
                       <div className="text-sm font-semibold">{exName[exId] || 'Ejercicio'}</div>
@@ -155,6 +161,7 @@ function ActiveWorkout({ workout, onEnd }: { workout: Workout; onEnd: () => void
   const [picker, setPicker] = useState(false)
   const [saveTpl, setSaveTpl] = useState(false)
   const [restEnd, setRestEnd] = useState<number | null>(null)
+  const [finished, setFinished] = useState(false)
   const [elapsed, setElapsed] = useState('')
   const [error, setError] = useState<string | null>(null)
 
@@ -218,9 +225,15 @@ function ActiveWorkout({ workout, onEnd }: { workout: Workout; onEnd: () => void
     if (sets.length === 0) {
       if (!confirm('No has apuntado ninguna serie. ¿Descartar este entreno?')) return
       await supabase.from('workouts').delete().eq('id', workout.id)
+      done()
     } else {
-      await supabase.from('workouts').update({ ended_at: new Date().toISOString() }).eq('id', workout.id)
+      const { error } = await supabase.from('workouts').update({ ended_at: new Date().toISOString() }).eq('id', workout.id)
+      if (error) return setError(errMsg(error))
+      setRestEnd(null)
+      setFinished(true) // muestra la ventana de "¿te haces una foto?"
     }
+  }
+  function done() {
     try { localStorage.removeItem(pendingKey(workout.id)) } catch { /* nada */ }
     onEnd()
   }
@@ -266,6 +279,7 @@ function ActiveWorkout({ workout, onEnd }: { workout: Workout; onEnd: () => void
       <ExercisePicker open={picker} onClose={() => setPicker(false)} onPick={addExercise} />
       <SaveTemplate open={saveTpl} onClose={() => setSaveTpl(false)} exerciseIds={order} defaultName={workout.name || ''} />
       {restEnd && <RestTimer end={restEnd} onChange={setRestEnd} />}
+      <FinishSheet workout={finished ? workout : null} sets={sets.length} volume={volume} onDone={done} />
     </div>
   )
 }
