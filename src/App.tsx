@@ -11,6 +11,8 @@ import Body from './screens/Body'
 import Progress from './screens/Progress'
 import Group from './screens/Group'
 import Settings from './screens/Settings'
+import Privacy from './screens/Privacy'
+import Admin from './screens/Admin'
 
 type Ctx = {
   session: Session
@@ -19,6 +21,7 @@ type Ctx = {
   exercises: Exercise[]
   reloadExercises: () => Promise<void>
   go: (t: Tab) => void
+  isAdmin: boolean
 }
 const AppCtx = createContext<Ctx | null>(null)
 export const useApp = () => useContext(AppCtx)!
@@ -76,6 +79,11 @@ function LoggedIn({ session }: { session: Session }) {
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [tab, setTab] = useState<Tab>(readTab)
   const [error, setError] = useState<string | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
+
+  useEffect(() => {
+    supabase.rpc('is_admin').then(({ data }) => setIsAdmin(data === true))
+  }, [session.user.id])
 
   const reloadExercises = useCallback(async () => {
     const { data } = await supabase.from('exercises').select('id,user_id,name,muscle').order('name')
@@ -107,7 +115,7 @@ function LoggedIn({ session }: { session: Session }) {
   if (!profile) return <Splash />
 
   return (
-    <AppCtx.Provider value={{ session, profile, setProfile, exercises, reloadExercises, go }}>
+    <AppCtx.Provider value={{ session, profile, setProfile, exercises, reloadExercises, go, isAdmin }}>
       <div className="min-h-full flex flex-col">
         <header className="pt-safe sticky top-0 z-30 bg-zinc-950/90 backdrop-blur border-b border-zinc-900">
           <div className="max-w-lg mx-auto flex items-center justify-between px-4 h-14">
@@ -116,7 +124,7 @@ function LoggedIn({ session }: { session: Session }) {
             </button>
             <div className="flex gap-1">
               <IconBtn active={tab === 'grupo'} onClick={() => go('grupo')} label="Grupo de amigos"><Users size={20} /></IconBtn>
-              <IconBtn active={tab === 'ajustes'} onClick={() => go('ajustes')} label="Ajustes"><SettingsIcon size={20} /></IconBtn>
+              <IconBtn active={tab === 'ajustes' || tab === 'privacidad' || tab === 'admin'} onClick={() => go('ajustes')} label="Ajustes"><SettingsIcon size={20} /></IconBtn>
             </div>
           </div>
         </header>
@@ -129,6 +137,8 @@ function LoggedIn({ session }: { session: Session }) {
           {tab === 'progreso' && <Progress />}
           {tab === 'grupo' && <Group />}
           {tab === 'ajustes' && <Settings />}
+          {tab === 'privacidad' && <Privacy />}
+          {tab === 'admin' && isAdmin && <Admin />}
         </main>
 
         <nav className="fixed bottom-0 inset-x-0 z-40 bg-zinc-950/95 backdrop-blur border-t border-zinc-800 pb-safe">

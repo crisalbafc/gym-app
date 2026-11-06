@@ -29,4 +29,4 @@ export type BodyWeight = { id: string; day: string; weight: number }
 export type Measurement = {
   id: string; day: string; waist: number | null; chest: number | null; arm: number | null; leg: number | null
 }
-export type Tab = 'hoy' | 'entreno' | 'dieta' | 'cuerpo' | 'progreso' | 'grupo' | 'ajustes'
+export type Tab = 'hoy' | 'entreno' | 'dieta' | 'cuerpo' | 'progreso' | 'grupo' | 'ajustes' | 'privacidad' | 'admin'

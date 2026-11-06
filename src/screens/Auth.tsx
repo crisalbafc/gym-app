@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Dumbbell } from 'lucide-react'
 import { supabase } from '../supabase'
-import { Button, Input, ErrorText, Segmented } from '../components/ui'
+import { Button, Input, ErrorText, Segmented, Sheet } from '../components/ui'
+import Privacy from './Privacy'
 import { errMsg } from '../lib/utils'
 
 export default function Auth() {
@@ -12,6 +13,8 @@ export default function Auth() {
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [consent, setConsent] = useState(false)
+  const [showPrivacy, setShowPrivacy] = useState(false)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -74,9 +77,19 @@ export default function Auth() {
             autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
           />
         )}
+        {mode === 'signup' && (
+          <label className="flex items-start gap-3 text-sm text-zinc-300 py-1">
+            <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} required className="h-5 w-5 mt-0.5 shrink-0 accent-lime-400" />
+            <span>
+              Acepto la{' '}
+              <button type="button" className="text-accent underline" onClick={() => setShowPrivacy(true)}>política de privacidad</button>{' '}
+              y doy mi consentimiento para que se guarden mis datos de entreno, dieta, peso y fotos.
+            </span>
+          </label>
+        )}
         <ErrorText error={error} />
         {info && <p className="text-sm text-accent bg-accent/10 rounded-xl px-3 py-2">{info}</p>}
-        <Button type="submit" className="w-full" disabled={busy}>
+        <Button type="submit" className="w-full" disabled={busy || (mode === 'signup' && !consent)}>
           {busy ? 'Un momento…' : mode === 'login' ? 'Entrar' : mode === 'signup' ? 'Crear cuenta' : 'Enviar enlace'}
         </Button>
       </form>
@@ -87,6 +100,11 @@ export default function Auth() {
       >
         {mode === 'reset' ? 'Volver a entrar' : '¿Has olvidado la contraseña?'}
       </button>
+      <button className="mt-3 text-xs text-zinc-500 underline" onClick={() => setShowPrivacy(true)}>Política de privacidad</button>
+
+      <Sheet open={showPrivacy} onClose={() => setShowPrivacy(false)} title="Privacidad">
+        <Privacy />
+      </Sheet>
     </div>
   )
 }

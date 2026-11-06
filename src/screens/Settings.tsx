@@ -1,5 +1,13 @@
 import { useState } from 'react'
-import { Download, LogOut, Check } from 'lucide-react'
+import { Download, LogOut, Check, Trash2, ShieldCheck, BarChart3, ChevronRight } from 'lucide-react'
+
+function LinkRow({ icon, label, onClick }: { icon: React.ReactNode; label: string; onClick: () => void }) {
+  return (
+    <button onClick={onClick} className="w-full min-h-12 px-3 rounded-xl flex items-center gap-3 text-left active:bg-zinc-800">
+      {icon}<span className="flex-1">{label}</span><ChevronRight size={18} className="text-zinc-500" />
+    </button>
+  )
+}
 import { supabase } from '../supabase'
 import { useApp } from '../App'
 import type { Profile } from '../types'
@@ -8,7 +16,7 @@ import { downloadCsv, errMsg, isoDay, num } from '../lib/utils'
 import { fetchAll } from '../lib/fetchAll'
 
 export default function Settings() {
-  const { profile, setProfile, session, exercises } = useApp()
+  const { profile, setProfile, session, exercises, go, isAdmin } = useApp()
   const [p, setP] = useState({
     display_name: profile.display_name,
     kcal_goal: String(profile.kcal_goal), protein_goal: String(profile.protein_goal),
@@ -19,6 +27,7 @@ export default function Settings() {
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   async function save() {
     setError(null)
@@ -56,6 +65,26 @@ export default function Settings() {
       setError(errMsg(e))
     } finally {
       setExporting(false)
+    }
+  }
+
+  async function deleteAccount() {
+    const answer = prompt('Esto borrará para siempre tu cuenta, tus entrenos, tu dieta, tu peso y tus fotos.\n\nSi estás seguro, escribe BORRAR:')
+    if (answer?.trim().toUpperCase() !== 'BORRAR') return
+    setDeleting(true); setError(null)
+    try {
+      // Primero las fotos (la base de datos no puede borrar archivos)
+      const folder = session.user.id
+      const { data: files } = await supabase.storage.from('workout-photos').list(folder, { limit: 1000 })
+      if (files?.length) await supabase.storage.from('workout-photos').remove(files.map((f) => `${folder}/${f.name}`))
+      const { error } = await supabase.rpc('delete_my_account')
+      if (error) throw error
+      await supabase.auth.signOut()
+      alert('Tu cuenta y todos tus datos se han borrado.')
+    } catch (e) {
+      setError(errMsg(e))
+      setDeleting(false)
+      window.scrollTo(0, 0)
     }
   }
 
@@ -101,9 +130,21 @@ export default function Settings() {
       </Button>
       <p className="text-xs text-zinc-500 mt-1">Se descargan archivos que puedes abrir con Excel.</p>
 
-      <Button variant="danger" className="w-full mt-8" onClick={() => supabase.auth.signOut()}>
+      <SectionTitle>Más</SectionTitle>
+      <Card className="!p-1">
+        {isAdmin && (
+          <LinkRow icon={<BarChart3 size={18} className="text-accent" />} label="Estadísticas de la app (solo tú)" onClick={() => go('admin')} />
+        )}
+        <LinkRow icon={<ShieldCheck size={18} />} label="Política de privacidad" onClick={() => go('privacidad')} />
+      </Card>
+
+      <Button variant="secondary" className="w-full mt-8" onClick={() => supabase.auth.signOut()}>
         <LogOut size={18} /> Cerrar sesión
       </Button>
+      <Button variant="danger" className="w-full mt-3" onClick={deleteAccount} disabled={deleting}>
+        <Trash2 size={18} /> {deleting ? 'Borrando…' : 'Borrar mi cuenta'}
+      </Button>
+      <p className="text-xs text-zinc-500 mt-1 text-center">Se borran para siempre tu cuenta, tus datos y tus fotos.</p>
     </div>
   )
 }
