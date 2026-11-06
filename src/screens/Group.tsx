@@ -205,7 +205,7 @@ export default function Group() {
       </Card>
 
       <ExercisePicker open={picker} onClose={() => setPicker(false)} onPick={(e) => { setEx(e); setPicker(false) }}
-        onlyIds={new Set(exercises.filter((e) => !e.user_id).map((e) => e.id))} />
+        onlyIds={new Set(exercises.map((e) => e.id))} />
     </div>
   )
 }

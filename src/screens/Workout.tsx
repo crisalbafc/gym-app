@@ -390,6 +390,8 @@ function ExerciseCard({ exercise, workoutId, sets, onAdd, onDelete, onRemove }: 
 /* ---------------- Selector de ejercicios ---------------- */
 
 const MUSCLES = ['Pecho', 'Espalda', 'Piernas', 'Glúteos', 'Hombros', 'Bíceps', 'Tríceps', 'Core', 'Otro']
+/** Minúsculas y sin tildes, para buscar y comparar nombres. */
+const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/\s+/g, ' ').trim()
 
 export function ExercisePicker({ open, onClose, onPick, onlyIds }: {
   open: boolean; onClose: () => void; onPick: (e: Exercise) => void; onlyIds?: Set<string>
@@ -401,15 +403,16 @@ export function ExercisePicker({ open, onClose, onPick, onlyIds }: {
   const [muscle, setMuscle] = useState('Pecho')
   const [error, setError] = useState<string | null>(null)
 
-  const filtered = exercises.filter((e) =>
-    (!onlyIds || onlyIds.has(e.id)) && e.name.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
-      .includes(q.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')))
+  const filtered = exercises.filter((e) => (!onlyIds || onlyIds.has(e.id)) && norm(e.name).includes(norm(q)))
   const groups = MUSCLES.map((m) => [m, filtered.filter((e) => e.muscle === m)] as const).filter(([, l]) => l.length)
   const others = filtered.filter((e) => !MUSCLES.includes(e.muscle))
 
   async function create() {
     setError(null)
     if (!name.trim()) return
+    // Si ya existe uno con el mismo nombre (común, tuyo o del grupo), usa ese
+    const existing = exercises.find((e) => norm(e.name) === norm(name))
+    if (existing) { setCreating(false); setName(''); onPick(existing); return }
     const { data, error } = await supabase.from('exercises').insert({ name: name.trim(), muscle, user_id: session.user.id }).select().single()
     if (error) return setError(errMsg(error))
     await reloadExercises()
@@ -454,7 +457,11 @@ export function ExercisePicker({ open, onClose, onPick, onlyIds }: {
               {list.map((e) => (
                 <button key={e.id} onClick={() => onPick(e)} className="w-full text-left min-h-12 px-3 rounded-xl active:bg-zinc-800 flex items-center justify-between">
                   {e.name}
-                  {e.user_id && <span className="text-[10px] text-zinc-500 border border-zinc-700 rounded px-1">propio</span>}
+                  {e.user_id && (
+                    <span className={`text-[10px] border rounded px-1 ${e.user_id === session.user.id ? 'text-zinc-500 border-zinc-700' : 'text-accent border-accent/40'}`}>
+                      {e.user_id === session.user.id ? 'propio' : 'grupo'}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
