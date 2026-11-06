@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Plus, Copy, Trash2, Trophy, Timer, Search, ChevronDown, ChevronUp, Play, Flag, Save, History, X } from 'lucide-react'
+import { Plus, Copy, Trash2, Trophy, Timer, Search, ChevronDown, ChevronUp, Play, Flag, Save, History, X, Pencil, Target, ArrowUp, ArrowDown } from 'lucide-react'
 import { supabase } from '../supabase'
 import { useApp } from '../App'
-import type { Exercise, Template, Workout, WorkoutSet } from '../types'
+import type { Exercise, PlanItem, Template, Workout, WorkoutSet } from '../types'
 import { Button, Card, Empty, ErrorText, Input, SectionTitle, Sheet, Stepper } from '../components/ui'
 import { errMsg, fmtDate, kg, num, round } from '../lib/utils'
 import { FinishSheet, HistoryPhoto } from '../components/WorkoutPhoto'
@@ -15,6 +15,14 @@ function readPending(id: string): string[] {
 }
 function writePending(id: string, ids: string[]) {
   try { localStorage.setItem(pendingKey(id), JSON.stringify(ids)) } catch { /* sin almacenamiento */ }
+}
+// Objetivo de cada ejercicio (ej. "4 × 8-10") cuando el entreno sale de una rutina
+const targetsKey = (id: string) => `wo-targets-${id}`
+function readTargets(id: string): Record<string, string> {
+  try { return JSON.parse(localStorage.getItem(targetsKey(id)) || '{}') } catch { return {} }
+}
+function writeTargets(id: string, t: Record<string, string>) {
+  try { localStorage.setItem(targetsKey(id), JSON.stringify(t)) } catch { /* sin almacenamiento */ }
 }
 
 export default function WorkoutScreen() {
@@ -37,6 +45,7 @@ export default function WorkoutScreen() {
 function Idle({ onStarted }: { onStarted: (w: Workout) => void }) {
   const { exercises } = useApp()
   const [templates, setTemplates] = useState<Template[]>([])
+  const [editing, setEditing] = useState<Template | 'new' | null>(null)
   const [history, setHistory] = useState<(Workout & { workout_sets: WorkoutSet[] })[]>([])
   const [open, setOpen] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -56,7 +65,12 @@ function Idle({ onStarted }: { onStarted: (w: Workout) => void }) {
     setError(null)
     const { data, error } = await supabase.from('workouts').insert({ name: template?.name ?? null }).select().single()
     if (error) return setError(errMsg(error))
-    if (template) writePending(data.id, template.exercise_ids)
+    if (template) {
+      const plan = template.plan?.length ? template.plan : template.exercise_ids.map((id) => ({ exercise_id: id, sets: null, reps: '' }))
+      writePending(data.id, plan.map((p) => p.exercise_id))
+      writeTargets(data.id, Object.fromEntries(plan.filter((p) => p.sets || p.reps)
+        .map((p) => [p.exercise_id, `${p.sets ?? '?'} × ${p.reps || '?'}`])))
+    }
     onStarted(data as Workout)
   }
   async function reopen(w: Workout) {
@@ -84,23 +98,37 @@ function Idle({ onStarted }: { onStarted: (w: Workout) => void }) {
         <Play size={22} /> Empezar entreno
       </Button>
 
-      <SectionTitle>Mis rutinas</SectionTitle>
+      <SectionTitle right={
+        <button onClick={() => setEditing('new')} className="h-9 px-3 rounded-full bg-zinc-800 text-accent text-sm font-semibold flex items-center gap-1">
+          <Plus size={16} /> Nueva rutina
+        </button>
+      }>Mis rutinas</SectionTitle>
       {templates.length === 0 ? (
-        <Card><p className="text-sm text-zinc-400">Aún no tienes rutinas. Haz un entreno y, al final, pulsa <b>«Guardar como rutina»</b> para repetirlo otro día con un toque.</p></Card>
+        <Card><p className="text-sm text-zinc-400">Aún no tienes rutinas. Pulsa <b>«Nueva rutina»</b> para montarla con tus ejercicios, series y repeticiones, o al terminar un entreno pulsa <b>«Guardar como rutina»</b>.</p></Card>
       ) : (
         <div className="space-y-2">
           {templates.map((t) => (
-            <Card key={t.id} className="flex items-center gap-3 !p-3">
-              <div className="flex-1 min-w-0">
+            <Card key={t.id} className="flex items-center gap-2 !p-3">
+              <button className="flex-1 min-w-0 text-left" onClick={() => setEditing(t)}>
                 <div className="font-semibold truncate">{t.name}</div>
-                <div className="text-xs text-zinc-500 truncate">{t.exercise_ids.map((id) => exName[id]).filter(Boolean).join(' · ')}</div>
-              </div>
-              <button onClick={() => removeTemplate(t)} className="h-10 w-10 text-zinc-500 flex items-center justify-center" aria-label="Borrar rutina"><Trash2 size={18} /></button>
+                <div className="text-xs text-zinc-500 truncate">
+                  {(t.plan?.length ? t.plan : t.exercise_ids.map((id) => ({ exercise_id: id, sets: null, reps: '' })))
+                    .map((p) => exName[p.exercise_id] && `${exName[p.exercise_id]}${p.sets ? ` ${p.sets}×${p.reps || '?'}` : ''}`)
+                    .filter(Boolean).join(' · ')}
+                </div>
+              </button>
+              <button onClick={() => setEditing(t)} className="h-10 w-10 text-zinc-400 flex items-center justify-center" aria-label="Editar rutina"><Pencil size={18} /></button>
               <Button className="!min-h-10" onClick={() => start(t)}><Play size={16} /> Empezar</Button>
             </Card>
           ))}
         </div>
       )}
+      <RoutineEditor
+        routine={editing}
+        onClose={() => setEditing(null)}
+        onSaved={() => { setEditing(null); load() }}
+        onDelete={async (t) => { await removeTemplate(t); setEditing(null) }}
+      />
 
       <SectionTitle>Historial</SectionTitle>
       {history.length === 0 && <Empty>Aquí aparecerán tus entrenos terminados.</Empty>}
@@ -158,6 +186,7 @@ function ActiveWorkout({ workout, onEnd }: { workout: Workout; onEnd: () => void
   const { exercises, profile } = useApp()
   const [sets, setSets] = useState<WorkoutSet[]>([])
   const [pending, setPending] = useState<string[]>(() => readPending(workout.id))
+  const [targets] = useState<Record<string, string>>(() => readTargets(workout.id))
   const [picker, setPicker] = useState(false)
   const [saveTpl, setSaveTpl] = useState(false)
   const [restEnd, setRestEnd] = useState<number | null>(null)
@@ -234,7 +263,7 @@ function ActiveWorkout({ workout, onEnd }: { workout: Workout; onEnd: () => void
     }
   }
   function done() {
-    try { localStorage.removeItem(pendingKey(workout.id)) } catch { /* nada */ }
+    try { localStorage.removeItem(pendingKey(workout.id)); localStorage.removeItem(targetsKey(workout.id)) } catch { /* nada */ }
     onEnd()
   }
 
@@ -256,6 +285,7 @@ function ActiveWorkout({ workout, onEnd }: { workout: Workout; onEnd: () => void
           <ExerciseCard
             key={id}
             exercise={exById[id]}
+            target={targets[id]}
             workoutId={workout.id}
             sets={sets.filter((s) => s.exercise_id === id)}
             onAdd={(w, r) => addSet(id, w, r)}
@@ -277,7 +307,7 @@ function ActiveWorkout({ workout, onEnd }: { workout: Workout; onEnd: () => void
       )}
 
       <ExercisePicker open={picker} onClose={() => setPicker(false)} onPick={addExercise} />
-      <SaveTemplate open={saveTpl} onClose={() => setSaveTpl(false)} exerciseIds={order} defaultName={workout.name || ''} />
+      <SaveTemplate open={saveTpl} onClose={() => setSaveTpl(false)} plan={order.map((id) => planFromSets(id, sets.filter((s) => s.exercise_id === id)))} defaultName={workout.name || ''} />
       {restEnd && <RestTimer end={restEnd} onChange={setRestEnd} />}
       <FinishSheet workout={finished ? workout : null} sets={sets.length} volume={volume} onDone={done} />
     </div>
@@ -288,8 +318,8 @@ function ActiveWorkout({ workout, onEnd }: { workout: Workout; onEnd: () => void
 
 type Board = { user_id: string; display_name: string; weight: number; reps: number; done_at: string; is_me: boolean }
 
-function ExerciseCard({ exercise, workoutId, sets, onAdd, onDelete, onRemove }: {
-  exercise: Exercise; workoutId: string; sets: WorkoutSet[]
+function ExerciseCard({ exercise, workoutId, sets, onAdd, onDelete, onRemove, target }: {
+  exercise: Exercise; workoutId: string; sets: WorkoutSet[]; target?: string
   onAdd: (w: number, r: number) => Promise<boolean>; onDelete: (id: string) => void; onRemove: () => void
 }) {
   const [last, setLast] = useState<WorkoutSet[] | null>(null)
@@ -344,6 +374,7 @@ function ExerciseCard({ exercise, workoutId, sets, onAdd, onDelete, onRemove }: 
       </div>
 
       <div className="mt-2 text-sm space-y-1">
+        {target && <p className="text-accent flex gap-1.5 font-semibold"><Target size={15} className="mt-0.5 shrink-0" />Objetivo: {target}</p>}
         {last && last.length > 0 ? (
           <p className="text-zinc-400 flex gap-1.5"><History size={15} className="mt-0.5 shrink-0" />
             <span>Última vez ({fmtDate(last[0].created_at)}): <span className="text-zinc-200">{last.map((s) => `${round(s.weight, 2)}×${s.reps}`).join(' · ')}</span></span>
@@ -475,13 +506,21 @@ export function ExercisePicker({ open, onClose, onPick, onlyIds }: {
 
 /* ---------------- Guardar rutina ---------------- */
 
-function SaveTemplate({ open, onClose, exerciseIds, defaultName }: { open: boolean; onClose: () => void; exerciseIds: string[]; defaultName: string }) {
+/** Convierte lo hecho en un ejercicio en un objetivo de rutina (nº de series × reps más habituales). */
+function planFromSets(exerciseId: string, ss: WorkoutSet[]): PlanItem {
+  if (!ss.length) return { exercise_id: exerciseId, sets: null, reps: '' }
+  const reps = ss.map((s) => s.reps)
+  const min = Math.min(...reps), max = Math.max(...reps)
+  return { exercise_id: exerciseId, sets: ss.length, reps: min === max ? String(min) : `${min}-${max}` }
+}
+
+function SaveTemplate({ open, onClose, plan, defaultName }: { open: boolean; onClose: () => void; plan: PlanItem[]; defaultName: string }) {
   const [name, setName] = useState(defaultName)
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => { if (open) { setDone(false); setName(defaultName) } }, [open, defaultName])
   async function save() {
-    const { error } = await supabase.from('templates').insert({ name: name.trim(), exercise_ids: exerciseIds })
+    const { error } = await supabase.from('templates').insert({ name: name.trim(), exercise_ids: plan.map((p) => p.exercise_id), plan })
     if (error) return setError(errMsg(error))
     setDone(true)
     setTimeout(onClose, 900)
@@ -490,7 +529,7 @@ function SaveTemplate({ open, onClose, exerciseIds, defaultName }: { open: boole
     <Sheet open={open} onClose={onClose} title="Guardar como rutina">
       {done ? <p className="text-accent py-4 text-center font-semibold">¡Rutina guardada!</p> : (
         <div className="space-y-3">
-          <p className="text-sm text-zinc-400">Se guardarán los {exerciseIds.length} ejercicios de este entreno para empezar con ellos otro día.</p>
+          <p className="text-sm text-zinc-400">Se guardarán los {plan.length} ejercicios de este entreno, con sus series y repeticiones, para empezar con ellos otro día.</p>
           <Input label="Nombre (ej. Día de pierna)" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
           <ErrorText error={error} />
           <Button className="w-full" onClick={save} disabled={!name.trim()}>Guardar</Button>
@@ -539,5 +578,101 @@ function RestTimer({ end, onChange }: { end: number; onChange: (v: number | null
         <button className={`h-10 px-3 rounded-xl font-semibold ${left <= 0 ? 'bg-zinc-950/20' : 'bg-zinc-800'}`} onClick={() => onChange(null)}>{left <= 0 ? 'OK' : 'Saltar'}</button>
       </div>
     </div>
+  )
+}
+
+/* ---------------- Crear / editar rutina ---------------- */
+
+function RoutineEditor({ routine, onClose, onSaved, onDelete }: {
+  routine: Template | 'new' | null; onClose: () => void; onSaved: () => void; onDelete: (t: Template) => void
+}) {
+  const { exercises } = useApp()
+  const exById = useMemo(() => Object.fromEntries(exercises.map((e) => [e.id, e])), [exercises])
+  const [name, setName] = useState('')
+  const [items, setItems] = useState<PlanItem[]>([])
+  const [picker, setPicker] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const isNew = routine === 'new'
+
+  useEffect(() => {
+    if (!routine) return
+    setError(null); setBusy(false)
+    if (routine === 'new') { setName(''); setItems([]); return }
+    setName(routine.name)
+    setItems(routine.plan?.length ? routine.plan.map((p) => ({ ...p }))
+      : routine.exercise_ids.map((id) => ({ exercise_id: id, sets: null, reps: '' })))
+  }, [routine])
+
+  const update = (i: number, patch: Partial<PlanItem>) => setItems((l) => l.map((x, j) => (j === i ? { ...x, ...patch } : x)))
+  const move = (i: number, d: number) => setItems((l) => {
+    const j = i + d
+    if (j < 0 || j >= l.length) return l
+    const c = [...l]; [c[i], c[j]] = [c[j], c[i]]; return c
+  })
+
+  async function save() {
+    setBusy(true); setError(null)
+    const row = { name: name.trim(), exercise_ids: items.map((x) => x.exercise_id), plan: items }
+    const { error } = routine && routine !== 'new'
+      ? await supabase.from('templates').update(row).eq('id', routine.id)
+      : await supabase.from('templates').insert(row)
+    setBusy(false)
+    if (error) return setError(errMsg(error).includes('plan') ? 'Falta actualizar la base de datos (archivo 006-rutinas.sql).' : errMsg(error))
+    onSaved()
+  }
+
+  return (
+    <>
+      <Sheet open={!!routine} onClose={onClose} title={isNew ? 'Nueva rutina' : 'Editar rutina'}>
+        <div className="space-y-3">
+          <Input label="Nombre (ej. Lunes · Pecho y tríceps)" value={name} onChange={(e) => setName(e.target.value)} />
+
+          {items.length === 0 && <Empty>Añade los ejercicios de tu rutina.</Empty>}
+          <ol className="space-y-2">
+            {items.map((it, i) => (
+              <li key={`${it.exercise_id}-${i}`} className="rounded-2xl bg-zinc-800/60 p-3">
+                <div className="flex items-center gap-1">
+                  <span className="text-zinc-500 text-sm w-5">{i + 1}.</span>
+                  <span className="flex-1 font-semibold truncate">{exById[it.exercise_id]?.name || 'Ejercicio'}</span>
+                  <button onClick={() => move(i, -1)} disabled={i === 0} className="h-9 w-9 text-zinc-400 disabled:opacity-20 flex items-center justify-center" aria-label="Subir"><ArrowUp size={16} /></button>
+                  <button onClick={() => move(i, 1)} disabled={i === items.length - 1} className="h-9 w-9 text-zinc-400 disabled:opacity-20 flex items-center justify-center" aria-label="Bajar"><ArrowDown size={16} /></button>
+                  <button onClick={() => setItems((l) => l.filter((_, j) => j !== i))} className="h-9 w-9 text-zinc-500 flex items-center justify-center" aria-label="Quitar"><X size={16} /></button>
+                </div>
+                <div className="flex items-center gap-2 mt-2 text-sm">
+                  <input
+                    inputMode="numeric" placeholder="4" value={it.sets ?? ''}
+                    onChange={(e) => update(i, { sets: e.target.value ? Math.max(1, Math.round(num(e.target.value))) : null })}
+                    className="w-16 h-11 rounded-xl bg-zinc-900 border border-zinc-700 text-center font-semibold focus:outline-none focus:border-accent" aria-label="Series"
+                  />
+                  <span className="text-zinc-400">series ×</span>
+                  <input
+                    placeholder="8-10" value={it.reps}
+                    onChange={(e) => update(i, { reps: e.target.value.slice(0, 12) })}
+                    className="w-20 h-11 rounded-xl bg-zinc-900 border border-zinc-700 text-center font-semibold focus:outline-none focus:border-accent" aria-label="Repeticiones"
+                  />
+                  <span className="text-zinc-400">reps</span>
+                </div>
+              </li>
+            ))}
+          </ol>
+
+          <Button variant="secondary" className="w-full" onClick={() => setPicker(true)}><Plus size={18} /> Añadir ejercicio</Button>
+          <p className="text-xs text-zinc-500">Series y repeticiones son opcionales. En reps puedes poner un rango, como «8-10».</p>
+          <ErrorText error={error} />
+          <Button className="w-full" onClick={save} disabled={busy || !name.trim() || items.length === 0}>
+            <Save size={18} /> {busy ? 'Guardando…' : 'Guardar rutina'}
+          </Button>
+          {!isNew && routine && (
+            <Button variant="danger" className="w-full" onClick={() => onDelete(routine)}><Trash2 size={18} /> Borrar rutina</Button>
+          )}
+        </div>
+      </Sheet>
+      <ExercisePicker
+        open={picker}
+        onClose={() => setPicker(false)}
+        onPick={(e) => { setItems((l) => [...l, { exercise_id: e.id, sets: 3, reps: '10' }]); setPicker(false) }}
+      />
+    </>
   )
 }

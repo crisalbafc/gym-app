@@ -16,7 +16,8 @@ export type Workout = {
 export type WorkoutSet = {
   id: string; workout_id: string; exercise_id: string; weight: number; reps: number; created_at: string
 }
-export type Template = { id: string; name: string; exercise_ids: string[] }
+export type PlanItem = { exercise_id: string; sets: number | null; reps: string }
+export type Template = { id: string; name: string; exercise_ids: string[]; plan?: PlanItem[] }
 export type Food = {
   id: string; name: string; kcal: number; protein: number; carbs: number; fat: number; last_grams: number
 }
