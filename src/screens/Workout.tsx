@@ -352,7 +352,7 @@ function ExerciseCard({ exercise, workoutId, sets, onAdd, onDelete, onRemove }: 
         {myBest && <p className="text-zinc-400 flex gap-1.5"><Trophy size={15} className="mt-0.5 shrink-0 text-yellow-400" />Tu récord: <span className="text-zinc-200">{kg(myBest.weight)} × {myBest.reps}</span></p>}
         {friends.length > 0 && (
           <p className="text-zinc-400 flex gap-1.5"><Trophy size={15} className="mt-0.5 shrink-0 text-accent" />
-            <span>Tu grupo: <span className="text-zinc-200">{friends.slice(0, 3).map((f) => `${f.display_name} ${round(f.weight, 2)}×${f.reps}`).join(' · ')}</span></span>
+            <span>Tus amigos: <span className="text-zinc-200">{friends.slice(0, 3).map((f) => `${f.display_name} ${round(f.weight, 2)}×${f.reps}`).join(' · ')}</span></span>
           </p>
         )}
       </div>

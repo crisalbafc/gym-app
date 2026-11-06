@@ -13,19 +13,20 @@ type FeedItem = {
   photo_path: string; sets: number; volume: number; is_me: boolean
 }
 
-function GroupPhotos() {
+function GroupPhotos({ groupId }: { groupId: string }) {
   const [items, setItems] = useState<FeedItem[] | null>(null)
   const [urls, setUrls] = useState<Record<string, string>>({})
   const [big, setBig] = useState<string | null>(null)
 
   useEffect(() => {
-    (async () => {
-      const { data } = await supabase.rpc('group_photo_feed')
+    setItems(null)
+    ;(async () => {
+      const { data } = await supabase.rpc('group_photo_feed', { p_group: groupId })
       const list = (data as FeedItem[]) || []
       setItems(list)
       setUrls(await photoUrls(list.map((i) => i.photo_path)))
     })()
-  }, [])
+  }, [groupId])
 
   return (
     <>
@@ -79,6 +80,9 @@ export default function Group() {
   const [board, setBoard] = useState<Board[]>([])
   const [picker, setPicker] = useState(false)
   const [copied, setCopied] = useState<string | null>(null)
+  const [sel, setSelRaw] = useState<string | null>(() => { try { return localStorage.getItem('group-sel') } catch { return null } })
+  const setSel = (id: string) => { setSelRaw(id); try { localStorage.setItem('group-sel', id) } catch { /* nada */ } }
+  const current = groups?.find((g) => g.id === sel) || groups?.[0] || null
 
   const load = useCallback(async () => {
     const { data } = await supabase.from('groups').select('id,name,invite_code').order('created_at')
@@ -97,23 +101,23 @@ export default function Group() {
   }, [exercises, ex])
 
   useEffect(() => {
-    if (!ex) return
-    supabase.rpc('exercise_leaderboard', { p_exercise: ex.id }).then(({ data }) => {
+    if (!ex || !current) return
+    supabase.rpc('exercise_leaderboard', { p_exercise: ex.id, p_group: current.id }).then(({ data }) => {
       setBoard(((data as Board[]) || []).sort((a, b) => b.weight - a.weight || b.reps - a.reps))
     })
-  }, [ex, groups])
+  }, [ex, current?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function create() {
     setError(null)
-    const { error } = await supabase.rpc('create_group', { p_name: name })
+    const { data, error } = await supabase.rpc('create_group', { p_name: name })
     if (error) return setError(errMsg(error))
-    setName(''); load()
+    setName(''); if (data?.id) setSel(data.id); await load(); window.scrollTo(0, 0)
   }
   async function join() {
     setError(null)
-    const { error } = await supabase.rpc('join_group', { p_code: code })
+    const { data, error } = await supabase.rpc('join_group', { p_code: code })
     if (error) return setError(errMsg(error).includes('no válido') ? 'Ese código no existe. Revísalo con tu amigo.' : errMsg(error))
-    setCode(''); load()
+    setCode(''); if (data?.id) setSel(data.id); await load(); window.scrollTo(0, 0)
   }
   async function leave(g: G) {
     if (!confirm(`¿Salir del grupo "${g.name}"?`)) return
@@ -140,7 +144,21 @@ export default function Group() {
       )}
       <ErrorText error={error} />
 
-      {groups.map((g) => (
+      {groups.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto -mx-4 px-4 pb-3 mb-1">
+          {groups.map((g) => (
+            <button
+              key={g.id}
+              onClick={() => setSel(g.id)}
+              className={`shrink-0 h-10 px-4 rounded-full text-sm font-semibold border ${current?.id === g.id ? 'bg-accent text-zinc-950 border-accent' : 'bg-zinc-900 text-zinc-300 border-zinc-800'}`}
+            >
+              {g.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {current && [current].map((g) => (
         <Card key={g.id} className="mb-3">
           <div className="flex items-start justify-between">
             <div>
@@ -160,9 +178,9 @@ export default function Group() {
         </Card>
       ))}
 
-      {groups.length > 0 && (
+      {current && (
         <>
-          <SectionTitle>Ranking</SectionTitle>
+          <SectionTitle>Ranking · {current.name}</SectionTitle>
           <Card>
             <button onClick={() => setPicker(true)} className="w-full min-h-12 px-3 rounded-xl bg-zinc-800 flex items-center justify-between mb-3">
               <span className="font-semibold">{ex?.name || 'Elige ejercicio'}</span><ChevronDown size={18} />
@@ -184,9 +202,9 @@ export default function Group() {
         </>
       )}
 
-      {groups.length > 0 && <GroupPhotos />}
+      {current && <GroupPhotos groupId={current.id} />}
 
-      <SectionTitle>{groups.length ? 'Otro grupo' : 'Empieza aquí'}</SectionTitle>
+      <SectionTitle>{groups.length ? 'Añadir otro grupo' : 'Empieza aquí'}</SectionTitle>
       <Card className="space-y-3">
         <div>
           <h3 className="font-bold mb-2">Unirme con un código</h3>
