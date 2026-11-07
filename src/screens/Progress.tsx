@@ -82,9 +82,9 @@ export default function Progress() {
     const m = new Map<string, number>()
     for (const s of sets || []) {
       const w = weekStart(isoDay(new Date(s.created_at)))
-      m.set(w, (m.get(w) || 0) + s.weight * s.reps)
+      m.set(w, (m.get(w) || 0) + 1)
     }
-    return [...m.entries()].sort().map(([week, vol]) => ({ week, vol: round(vol) }))
+    return [...m.entries()].sort().map(([week, n]) => ({ week, series: n }))
   }, [sets])
 
   const bodySeries = useMemo(() => weights.map((w, i) => {
@@ -138,19 +138,19 @@ export default function Progress() {
           </Card>
 
           <Card>
-            <h2 className="font-bold mb-2">Volumen por semana</h2>
+            <h2 className="font-bold mb-2">Series por semana</h2>
             {weekly.length === 0 ? <Empty>Sin entrenos en este periodo.</Empty> : (
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={weekly} margin={{ left: -10, right: 8, top: 8 }}>
                   <CartesianGrid stroke="#27272a" vertical={false} />
                   <XAxis dataKey="week" tickFormatter={shortDay} {...AXIS} minTickGap={16} />
-                  <YAxis {...AXIS} tickFormatter={(v) => (v >= 1000 ? `${round(v / 1000, 1)}k` : v)} />
-                  <Tooltip {...TIP} cursor={{ fill: '#27272a' }} labelFormatter={(d) => `Semana del ${shortDay(String(d))}`} formatter={(v) => [`${Number(v).toLocaleString('es-ES')} kg`, 'Volumen']} />
-                  <RBar dataKey="vol" fill="#a3e635" radius={[6, 6, 0, 0]} />
+                  <YAxis {...AXIS} allowDecimals={false} />
+                  <Tooltip {...TIP} cursor={{ fill: '#27272a' }} labelFormatter={(d) => `Semana del ${shortDay(String(d))}`} formatter={(v) => [v, 'Series']} />
+                  <RBar dataKey="series" fill="#a3e635" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
-            <p className="text-xs text-zinc-500 mt-1">Volumen = suma de kilos × repeticiones de todas tus series.</p>
+            <p className="text-xs text-zinc-500 mt-1">Cuántas series has hecho cada semana: sirve para ver si eres constante.</p>
           </Card>
 
           <Card>

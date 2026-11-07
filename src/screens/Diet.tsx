@@ -148,7 +148,8 @@ export function AddFood({ meal, day, onClose, onAdded }: { meal: Meal | null; da
     setMealSel(meal); setPicked(null); setQ(''); setError(null)
     setF({ name: '', kcal: '', protein: '', carbs: '', fat: '' }); setGrams('100')
     supabase.from('foods').select('*').order('name').then(({ data }) => {
-      const list = (data as Food[]) || []
+      // Primero los tuyos, luego los comunes
+      const list = ((data as Food[]) || []).sort((a, b) => Number(!a.user_id) - Number(!b.user_id) || a.name.localeCompare(b.name, 'es'))
       setFoods(list)
       setMode(list.length ? 'mine' : 'new')
     })
@@ -174,7 +175,7 @@ export function AddFood({ meal, day, onClose, onAdded }: { meal: Meal | null; da
         kcal: round(total.kcal, 1), protein: round(total.protein, 1), carbs: round(total.carbs, 1), fat: round(total.fat, 1),
       })
       if (error) throw error
-      if (picked) await supabase.from('foods').update({ last_grams: g }).eq('id', picked.id)
+      if (picked?.user_id) await supabase.from('foods').update({ last_grams: g }).eq('id', picked.id)
       else if (save) await supabase.from('foods').insert({ name, ...per100, last_grams: g })
       onAdded(); onClose()
     } catch (e) {
@@ -200,7 +201,7 @@ export function AddFood({ meal, day, onClose, onAdded }: { meal: Meal | null; da
         </select>
 
         {!picked && (
-          <Segmented value={mode} onChange={setMode} options={[{ value: 'mine', label: `Mis alimentos (${foods.length})` }, { value: 'new', label: 'Nuevo' }]} />
+          <Segmented value={mode} onChange={setMode} options={[{ value: 'mine', label: `Alimentos (${foods.length})` }, { value: 'new', label: 'Nuevo' }]} />
         )}
 
         {picked ? (
@@ -217,15 +218,21 @@ export function AddFood({ meal, day, onClose, onAdded }: { meal: Meal | null; da
               <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar…" className="w-full min-h-12 pl-10 pr-3 rounded-xl bg-zinc-800 border border-zinc-700 focus:outline-none focus:border-accent" />
             </div>
-            {filtered.length === 0 && <Empty>No hay alimentos guardados{q ? ' con ese nombre' : ''}. Créalo en «Nuevo».</Empty>}
+            {filtered.length === 0 && <Empty>No hay alimentos{q ? ' con ese nombre' : ''}. Créalo en «Nuevo».</Empty>}
+            <p className="text-[11px] text-zinc-500 mb-1">Valores aproximados. Si tienes la etiqueta, mejor crea el tuyo en «Nuevo».</p>
             <ul className="max-h-72 overflow-y-auto">
               {filtered.map((x) => (
                 <li key={x.id} className="flex items-center">
                   <button className="flex-1 text-left min-h-12 px-2 rounded-xl active:bg-zinc-800" onClick={() => { setPicked(x); setGrams(String(round(x.last_grams))) }}>
                     <div>{x.name}</div>
-                    <div className="text-xs text-zinc-500">{round(x.kcal)} kcal / 100 g</div>
+                    <div className="text-xs text-zinc-500">
+                      {round(x.kcal)} kcal / 100 g · P {round(x.protein, 1)} · H {round(x.carbs, 1)} · G {round(x.fat, 1)}
+                      {x.user_id && <span className="ml-1 text-accent">· tuyo</span>}
+                    </div>
                   </button>
-                  <button onClick={() => deleteFood(x.id)} className="h-10 w-10 text-zinc-600 flex items-center justify-center" aria-label="Borrar alimento"><Trash2 size={16} /></button>
+                  {x.user_id
+                    ? <button onClick={() => deleteFood(x.id)} className="h-10 w-10 text-zinc-600 flex items-center justify-center" aria-label="Borrar alimento"><Trash2 size={16} /></button>
+                    : <span className="w-10" />}
                 </li>
               ))}
             </ul>

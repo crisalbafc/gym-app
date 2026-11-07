@@ -13,6 +13,7 @@ import Group from './screens/Group'
 import Settings from './screens/Settings'
 import Privacy from './screens/Privacy'
 import Admin from './screens/Admin'
+import RestTimer, { readRestEnd, saveRestEnd } from './components/RestTimer'
 
 type Ctx = {
   session: Session
@@ -22,6 +23,9 @@ type Ctx = {
   reloadExercises: () => Promise<void>
   go: (t: Tab) => void
   isAdmin: boolean
+  /** Temporizador de descanso (hora de fin en ms, o null) */
+  restEnd: number | null
+  setRestEnd: (v: number | null) => void
 }
 const AppCtx = createContext<Ctx | null>(null)
 export const useApp = () => useContext(AppCtx)!
@@ -80,6 +84,8 @@ function LoggedIn({ session }: { session: Session }) {
   const [tab, setTab] = useState<Tab>(readTab)
   const [error, setError] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [restEnd, setRestEndRaw] = useState<number | null>(readRestEnd)
+  const setRestEnd = useCallback((v: number | null) => { setRestEndRaw(v); saveRestEnd(v) }, [])
 
   useEffect(() => {
     supabase.rpc('is_admin').then(({ data }) => setIsAdmin(data === true))
@@ -115,7 +121,7 @@ function LoggedIn({ session }: { session: Session }) {
   if (!profile) return <Splash />
 
   return (
-    <AppCtx.Provider value={{ session, profile, setProfile, exercises, reloadExercises, go, isAdmin }}>
+    <AppCtx.Provider value={{ session, profile, setProfile, exercises, reloadExercises, go, isAdmin, restEnd, setRestEnd }}>
       <div className="min-h-full flex flex-col">
         <header className="pt-safe sticky top-0 z-30 bg-zinc-950/90 backdrop-blur border-b border-zinc-900">
           <div className="max-w-lg mx-auto flex items-center justify-between px-4 h-14">
@@ -140,6 +146,8 @@ function LoggedIn({ session }: { session: Session }) {
           {tab === 'privacidad' && <Privacy />}
           {tab === 'admin' && isAdmin && <Admin />}
         </main>
+
+        {restEnd && <RestTimer end={restEnd} onChange={setRestEnd} />}
 
         <nav className="fixed bottom-0 inset-x-0 z-40 bg-zinc-950/95 backdrop-blur border-t border-zinc-800 pb-safe">
           <div className="max-w-lg mx-auto grid grid-cols-5">

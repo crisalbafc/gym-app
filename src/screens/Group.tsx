@@ -42,7 +42,7 @@ function GroupPhotos({ groupId }: { groupId: string }) {
                 : <div className="w-full aspect-square bg-zinc-800" />}
               <div className="p-2">
                 <div className="text-sm font-semibold truncate">{i.is_me ? 'Tú' : i.display_name}</div>
-                <div className="text-xs text-zinc-500 truncate">{fmtDate(i.started_at)} · {i.sets} series · {round(+i.volume).toLocaleString('es-ES')} kg</div>
+                <div className="text-xs text-zinc-500 truncate">{fmtDate(i.started_at)} · {i.sets} series</div>
               </div>
             </button>
           ))}
@@ -55,7 +55,7 @@ function GroupPhotos({ groupId }: { groupId: string }) {
             <img src={urls[i.photo_path]} alt={`Foto de ${i.display_name}`} className="max-h-[75vh] max-w-full rounded-2xl object-contain" />
             <div className="mt-3 text-center">
               <div className="font-bold">{i.is_me ? 'Tú' : i.display_name}{i.workout_name ? ` · ${i.workout_name}` : ''}</div>
-              <div className="text-sm text-zinc-400">{fmtDate(i.started_at, { weekday: 'long', day: 'numeric', month: 'long' })} · {i.sets} series · {round(+i.volume).toLocaleString('es-ES')} kg</div>
+              <div className="text-sm text-zinc-400">{fmtDate(i.started_at, { weekday: 'long', day: 'numeric', month: 'long' })} · {i.sets} series</div>
               <div className="text-xs text-zinc-500 mt-2">Toca para cerrar</div>
             </div>
           </div>

@@ -4,8 +4,9 @@ import { supabase } from '../supabase'
 import { useApp } from '../App'
 import type { Exercise, PlanItem, Template, Workout, WorkoutSet } from '../types'
 import { Button, Card, Empty, ErrorText, Input, SectionTitle, Sheet, Stepper } from '../components/ui'
-import { errMsg, fmtDate, kg, num, round } from '../lib/utils'
-import { FinishSheet, HistoryPhoto } from '../components/WorkoutPhoto'
+import { e1rm, errMsg, fmtDate, num, round } from '../lib/utils'
+import { HistoryPhoto } from '../components/WorkoutPhoto'
+import { FinishSummary, HypeScreen } from '../components/Motivation'
 import { deletePhotoFile } from '../lib/photos'
 import { Camera } from 'lucide-react'
 
@@ -27,6 +28,7 @@ function writeTargets(id: string, t: Record<string, string>) {
 
 export default function WorkoutScreen() {
   const [active, setActive] = useState<Workout | null | undefined>(undefined)
+  const [hype, setHype] = useState(false)
 
   const load = useCallback(async () => {
     const { data } = await supabase.from('workouts').select('*').is('ended_at', null).order('started_at', { ascending: false }).limit(1)
@@ -35,14 +37,19 @@ export default function WorkoutScreen() {
   useEffect(() => { load() }, [load])
 
   if (active === undefined) return null
-  return active
-    ? <ActiveWorkout workout={active} onEnd={() => setActive(null)} />
-    : <Idle onStarted={setActive} />
+  return (
+    <>
+      {active
+        ? <ActiveWorkout workout={active} onEnd={() => setActive(null)} />
+        : <Idle onStarted={(w, fresh) => { setActive(w); if (fresh) setHype(true) }} />}
+      {hype && <HypeScreen onGo={() => setHype(false)} />}
+    </>
+  )
 }
 
 /* ---------------- Sin entreno activo ---------------- */
 
-function Idle({ onStarted }: { onStarted: (w: Workout) => void }) {
+function Idle({ onStarted }: { onStarted: (w: Workout, fresh: boolean) => void }) {
   const { exercises } = useApp()
   const [templates, setTemplates] = useState<Template[]>([])
   const [editing, setEditing] = useState<Template | 'new' | null>(null)
@@ -71,12 +78,12 @@ function Idle({ onStarted }: { onStarted: (w: Workout) => void }) {
       writeTargets(data.id, Object.fromEntries(plan.filter((p) => p.sets || p.reps)
         .map((p) => [p.exercise_id, `${p.sets ?? '?'} × ${p.reps || '?'}`])))
     }
-    onStarted(data as Workout)
+    onStarted(data as Workout, true)
   }
   async function reopen(w: Workout) {
     const { data, error } = await supabase.from('workouts').update({ ended_at: null }).eq('id', w.id).select().single()
     if (error) return setError(errMsg(error))
-    onStarted(data as Workout)
+    onStarted(data as Workout, false)
   }
   async function removeWorkout(w: Workout) {
     if (!confirm('¿Borrar este entreno y todas sus series?')) return
@@ -135,7 +142,6 @@ function Idle({ onStarted }: { onStarted: (w: Workout) => void }) {
       <div className="space-y-2">
         {history.map((w) => {
           const sets = [...w.workout_sets].sort((a, b) => a.created_at.localeCompare(b.created_at))
-          const vol = sets.reduce((s, x) => s + x.weight * x.reps, 0)
           const byEx = groupSets(sets)
           const isOpen = open === w.id
           return (
@@ -144,7 +150,7 @@ function Idle({ onStarted }: { onStarted: (w: Workout) => void }) {
                 <div className="flex-1">
                   <div className="font-semibold flex items-center gap-1.5">{w.name || 'Entreno'} · <span className="text-zinc-400 font-normal">{fmtDate(w.started_at, { weekday: 'short', day: 'numeric', month: 'short' })}</span>
                     {w.photo_path && <Camera size={14} className="text-accent" aria-label="Tiene foto" />}</div>
-                  <div className="text-xs text-zinc-500">{byEx.length} ejercicios · {sets.length} series · {round(vol).toLocaleString('es-ES')} kg de volumen</div>
+                  <div className="text-xs text-zinc-500">{byEx.length} ejercicios · {sets.length} series</div>
                 </div>
                 {isOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
               </button>
@@ -183,13 +189,12 @@ function groupSets(sets: WorkoutSet[]): [string, WorkoutSet[]][] {
 /* ---------------- Entreno en marcha ---------------- */
 
 function ActiveWorkout({ workout, onEnd }: { workout: Workout; onEnd: () => void }) {
-  const { exercises, profile } = useApp()
+  const { exercises, profile, setRestEnd } = useApp()
   const [sets, setSets] = useState<WorkoutSet[]>([])
   const [pending, setPending] = useState<string[]>(() => readPending(workout.id))
   const [targets] = useState<Record<string, string>>(() => readTargets(workout.id))
   const [picker, setPicker] = useState(false)
   const [saveTpl, setSaveTpl] = useState(false)
-  const [restEnd, setRestEnd] = useState<number | null>(null)
   const [finished, setFinished] = useState(false)
   const [elapsed, setElapsed] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -267,14 +272,13 @@ function ActiveWorkout({ workout, onEnd }: { workout: Workout; onEnd: () => void
     onEnd()
   }
 
-  const volume = sets.reduce((s, x) => s + x.weight * x.reps, 0)
 
   return (
     <div>
       <div className="flex items-start justify-between mb-1">
         <div>
           <h1 className="text-2xl font-extrabold">{workout.name || 'Entreno de hoy'}</h1>
-          <p className="text-sm text-zinc-400">{elapsed} · {sets.length} series · {round(volume).toLocaleString('es-ES')} kg</p>
+          <p className="text-sm text-zinc-400">{elapsed} · {order.length} ejercicios · {sets.length} series</p>
         </div>
         <Button onClick={finish} className="!min-h-10"><Flag size={16} /> Terminar</Button>
       </div>
@@ -308,8 +312,7 @@ function ActiveWorkout({ workout, onEnd }: { workout: Workout; onEnd: () => void
 
       <ExercisePicker open={picker} onClose={() => setPicker(false)} onPick={addExercise} />
       <SaveTemplate open={saveTpl} onClose={() => setSaveTpl(false)} plan={order.map((id) => planFromSets(id, sets.filter((s) => s.exercise_id === id)))} defaultName={workout.name || ''} />
-      {restEnd && <RestTimer end={restEnd} onChange={setRestEnd} />}
-      <FinishSheet workout={finished ? workout : null} sets={sets.length} volume={volume} onDone={done} />
+      <FinishSummary workout={finished ? workout : null} sets={sets} exById={exById} onDone={done} />
     </div>
   )
 }
@@ -327,7 +330,6 @@ function ExerciseCard({ exercise, workoutId, sets, onAdd, onDelete, onRemove, ta
   const [weight, setWeight] = useState('')
   const [reps, setReps] = useState('')
   const [busy, setBusy] = useState(false)
-  const initialized = useRef(false)
 
   useEffect(() => {
     (async () => {
@@ -336,20 +338,21 @@ function ExerciseCard({ exercise, workoutId, sets, onAdd, onDelete, onRemove, ta
         .order('created_at', { ascending: false }).limit(30)
       const rows = (data as WorkoutSet[]) || []
       const lastWorkout = rows[0]?.workout_id
-      const lastSets = rows.filter((r) => r.workout_id === lastWorkout).reverse()
-      setLast(lastSets)
+      setLast(rows.filter((r) => r.workout_id === lastWorkout).reverse())
       const { data: b } = await supabase.rpc('exercise_leaderboard', { p_exercise: exercise.id })
       setBoard(((b as Board[]) || []).sort((x, y) => y.weight - x.weight || y.reps - x.reps))
     })()
   }, [exercise.id, workoutId])
 
-  // Rellena kilos/reps con la serie anterior (de hoy o del último entreno)
+  // Prepara la siguiente serie con lo que hiciste en esa misma serie la sesión anterior
+  // (si no hay, con tu última serie de hoy)
+  const nextIdx = sets.length
+  const prevForNext = last?.[nextIdx]
   useEffect(() => {
-    if (initialized.current) return
-    const ref = sets[sets.length - 1] || last?.[0]
-    if (ref) { setWeight(String(round(ref.weight, 2))); setReps(String(ref.reps)); initialized.current = true }
-    else if (last) initialized.current = true
-  }, [sets, last])
+    if (last === null) return
+    const ref = prevForNext || sets[sets.length - 1] || last[last.length - 1]
+    if (ref) { setWeight(String(round(+ref.weight, 2))); setReps(String(ref.reps)) }
+  }, [nextIdx, last]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function add(w = num(weight), r = Math.round(num(reps))) {
     if (r <= 0) return
@@ -361,9 +364,17 @@ function ExerciseCard({ exercise, workoutId, sets, onAdd, onDelete, onRemove, ta
   const myBest = board.find((b) => b.is_me)
   const friends = board.filter((b) => !b.is_me)
   const lastOne = sets[sets.length - 1]
+  const fmt = (s: { weight: number; reps: number }) => `${round(+s.weight, 2)} kg × ${s.reps}`
+  // Compara una serie de hoy con la misma serie de la sesión anterior
+  const vs = (s: WorkoutSet, i: number) => {
+    const p = last?.[i]
+    if (!p) return null
+    const d = e1rm(+s.weight, s.reps) - e1rm(+p.weight, p.reps)
+    return d > 0.01 ? 'up' : d < -0.01 ? 'down' : 'same'
+  }
 
   return (
-    <Card className="scroll-mt-20" >
+    <Card className="scroll-mt-20">
       <div id={`ex-${exercise.id}`} className="scroll-mt-20" />
       <div className="flex items-start justify-between gap-2">
         <div>
@@ -373,14 +384,28 @@ function ExerciseCard({ exercise, workoutId, sets, onAdd, onDelete, onRemove, ta
         <button onClick={onRemove} className="h-9 w-9 -mr-1 -mt-1 rounded-full text-zinc-500 flex items-center justify-center active:bg-zinc-800" aria-label="Quitar ejercicio"><X size={18} /></button>
       </div>
 
+      {target && <p className="mt-2 text-sm text-accent flex gap-1.5 font-semibold"><Target size={15} className="mt-0.5 shrink-0" />Objetivo: {target}</p>}
+
+      {/* Sesión anterior, serie a serie */}
+      {last && last.length > 0 && (
+        <div className="mt-3 rounded-xl bg-sky-500/10 border border-sky-500/20 p-3">
+          <div className="text-xs font-semibold text-sky-300 flex items-center gap-1.5 mb-1.5">
+            <History size={14} /> Sesión anterior · {fmtDate(last[0].created_at, { weekday: 'short', day: 'numeric', month: 'short' })}
+          </div>
+          <ol className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-sm">
+            {last.map((s, i) => (
+              <li key={s.id} className={i === nextIdx ? 'text-zinc-50 font-semibold' : 'text-zinc-300'}>
+                <span className="text-zinc-500 text-xs mr-1">S{i + 1}</span>{fmt(s)}
+              </li>
+            ))}
+          </ol>
+          <p className="text-xs text-zinc-400 mt-1.5">💡 Intenta igualar o mejorar cada serie: un poco más de peso o una repetición más.</p>
+        </div>
+      )}
+      {last && last.length === 0 && <p className="mt-2 text-sm text-zinc-500">Primera vez con este ejercicio 💪</p>}
+
       <div className="mt-2 text-sm space-y-1">
-        {target && <p className="text-accent flex gap-1.5 font-semibold"><Target size={15} className="mt-0.5 shrink-0" />Objetivo: {target}</p>}
-        {last && last.length > 0 ? (
-          <p className="text-zinc-400 flex gap-1.5"><History size={15} className="mt-0.5 shrink-0" />
-            <span>Última vez ({fmtDate(last[0].created_at)}): <span className="text-zinc-200">{last.map((s) => `${round(s.weight, 2)}×${s.reps}`).join(' · ')}</span></span>
-          </p>
-        ) : last && <p className="text-zinc-500">Primera vez con este ejercicio 💪</p>}
-        {myBest && <p className="text-zinc-400 flex gap-1.5"><Trophy size={15} className="mt-0.5 shrink-0 text-yellow-400" />Tu récord: <span className="text-zinc-200">{kg(myBest.weight)} × {myBest.reps}</span></p>}
+        {myBest && <p className="text-zinc-400 flex gap-1.5"><Trophy size={15} className="mt-0.5 shrink-0 text-yellow-400" />Tu récord: <span className="text-zinc-200">{fmt(myBest)}</span></p>}
         {friends.length > 0 && (
           <p className="text-zinc-400 flex gap-1.5"><Trophy size={15} className="mt-0.5 shrink-0 text-accent" />
             <span>Tus amigos: <span className="text-zinc-200">{friends.slice(0, 3).map((f) => `${f.display_name} ${round(f.weight, 2)}×${f.reps}`).join(' · ')}</span></span>
@@ -390,17 +415,26 @@ function ExerciseCard({ exercise, workoutId, sets, onAdd, onDelete, onRemove, ta
 
       {sets.length > 0 && (
         <ol className="mt-3 space-y-1">
-          {sets.map((s, i) => (
-            <li key={s.id} className="flex items-center gap-3 bg-zinc-800/60 rounded-xl px-3 h-11">
-              <span className="text-xs text-zinc-500 w-12">Serie {i + 1}</span>
-              <span className="flex-1 font-semibold">{round(s.weight, 2)} kg × {s.reps}</span>
-              <button onClick={() => onDelete(s.id)} className="h-9 w-9 text-zinc-500 flex items-center justify-center" aria-label="Borrar serie"><Trash2 size={16} /></button>
-            </li>
-          ))}
+          {sets.map((s, i) => {
+            const c = vs(s, i)
+            return (
+              <li key={s.id} className="flex items-center gap-2 bg-zinc-800/60 rounded-xl px-3 h-11">
+                <span className="text-xs text-zinc-500 w-12">Serie {i + 1}</span>
+                <span className="flex-1 font-semibold">{fmt(s)}</span>
+                {c && <span className={`text-xs font-semibold ${c === 'up' ? 'text-accent' : c === 'down' ? 'text-orange-300' : 'text-zinc-500'}`}>
+                  {c === 'up' ? '▲ mejor' : c === 'down' ? '▼' : '= igual'}
+                </span>}
+                <button onClick={() => onDelete(s.id)} className="h-9 w-9 text-zinc-500 flex items-center justify-center" aria-label="Borrar serie"><Trash2 size={16} /></button>
+              </li>
+            )
+          })}
         </ol>
       )}
 
-      <div className="flex gap-2 mt-3">
+      <div className="mt-3 text-xs text-zinc-400">
+        Serie {nextIdx + 1}{prevForNext ? <> · la sesión anterior: <b className="text-sky-300">{fmt(prevForNext)}</b></> : null}
+      </div>
+      <div className="flex gap-2 mt-1">
         <Stepper label="Kilos" value={weight} onChange={setWeight} step={2.5} />
         <Stepper label="Reps" value={reps} onChange={setReps} step={1} />
       </div>
@@ -409,7 +443,7 @@ function ExerciseCard({ exercise, workoutId, sets, onAdd, onDelete, onRemove, ta
           <Plus size={20} /> Añadir serie
         </Button>
         {lastOne && (
-          <Button variant="secondary" className="h-14" disabled={busy} onClick={() => add(lastOne.weight, lastOne.reps)} aria-label="Repetir la última serie">
+          <Button variant="secondary" className="h-14" disabled={busy} onClick={() => add(+lastOne.weight, lastOne.reps)} aria-label="Repetir la última serie">
             <Copy size={18} /> Repetir
           </Button>
         )}
@@ -536,48 +570,6 @@ function SaveTemplate({ open, onClose, plan, defaultName }: { open: boolean; onC
         </div>
       )}
     </Sheet>
-  )
-}
-
-/* ---------------- Temporizador de descanso ---------------- */
-
-function beep() {
-  try {
-    const ctx = new AudioContext()
-    ;[0, 0.25, 0.5].forEach((t) => {
-      const o = ctx.createOscillator(), g = ctx.createGain()
-      o.frequency.value = 880
-      o.connect(g); g.connect(ctx.destination)
-      g.gain.setValueAtTime(0.3, ctx.currentTime + t)
-      o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + 0.15)
-    })
-  } catch { /* sin sonido */ }
-  try { navigator.vibrate?.([300, 150, 300]) } catch { /* sin vibración */ }
-}
-
-function RestTimer({ end, onChange }: { end: number; onChange: (v: number | null) => void }) {
-  const [left, setLeft] = useState(Math.ceil((end - Date.now()) / 1000))
-  useEffect(() => {
-    const t = setInterval(() => {
-      const l = Math.ceil((end - Date.now()) / 1000)
-      setLeft(l)
-      if (l <= 0) { clearInterval(t); beep(); setTimeout(() => onChange(null), 2500) }
-    }, 250)
-    return () => clearInterval(t)
-  }, [end, onChange])
-  const m = Math.floor(Math.max(0, left) / 60), s = Math.max(0, left) % 60
-  return (
-    <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-40 px-4 pb-2">
-      <div className={`max-w-lg mx-auto rounded-2xl border px-4 py-2 flex items-center gap-3 shadow-xl ${left <= 0 ? 'bg-accent text-zinc-950 border-accent' : 'bg-zinc-900 border-zinc-700'}`}>
-        <Timer size={22} />
-        <div className="flex-1">
-          <div className="text-xs opacity-70">{left <= 0 ? '¡A por la siguiente serie!' : 'Descanso'}</div>
-          <div className="text-2xl font-bold tabular-nums">{m}:{String(s).padStart(2, '0')}</div>
-        </div>
-        {left > 0 && <button className="h-10 px-3 rounded-xl bg-zinc-800 font-semibold" onClick={() => onChange(end + 15000)}>+15 s</button>}
-        <button className={`h-10 px-3 rounded-xl font-semibold ${left <= 0 ? 'bg-zinc-950/20' : 'bg-zinc-800'}`} onClick={() => onChange(null)}>{left <= 0 ? 'OK' : 'Saltar'}</button>
-      </div>
-    </div>
   )
 }
 

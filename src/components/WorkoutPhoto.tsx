@@ -3,11 +3,11 @@ import { Camera, ImagePlus, Trash2, Users, Lock } from 'lucide-react'
 import { useApp } from '../App'
 import type { Workout } from '../types'
 import { Button, ErrorText, Sheet } from './ui'
-import { errMsg, round } from '../lib/utils'
+import { errMsg } from '../lib/utils'
 import { photoUrl, removeWorkoutPhoto, setPhotoShared, setWorkoutPhoto } from '../lib/photos'
 
 /** Dos botones: hacer foto con la cámara o elegirla de la galería. */
-function PhotoButtons({ onFile, busy, compact }: { onFile: (f: File) => void; busy: boolean; compact?: boolean }) {
+export function PhotoButtons({ onFile, busy, compact }: { onFile: (f: File) => void; busy: boolean; compact?: boolean }) {
   const cam = useRef<HTMLInputElement>(null)
   const gal = useRef<HTMLInputElement>(null)
   const pick = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -29,7 +29,7 @@ function PhotoButtons({ onFile, busy, compact }: { onFile: (f: File) => void; bu
   )
 }
 
-function ShareToggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+export function ShareToggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   return (
     <label className="flex items-center justify-between gap-3 min-h-12">
       <span className="flex items-center gap-2 text-sm">
@@ -38,51 +38,6 @@ function ShareToggle({ value, onChange }: { value: boolean; onChange: (v: boolea
       </span>
       <input type="checkbox" checked={value} onChange={(e) => onChange(e.target.checked)} className="h-6 w-6 accent-lime-400" aria-label="Compartir con mi grupo" />
     </label>
-  )
-}
-
-/** Ventana que sale al terminar un entreno. */
-export function FinishSheet({ workout, sets, volume, onDone }: { workout: Workout | null; sets: number; volume: number; onDone: () => void }) {
-  const { session } = useApp()
-  const [share, setShare] = useState(true)
-  const [busy, setBusy] = useState(false)
-  const [preview, setPreview] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  async function upload(f: File) {
-    if (!workout) return
-    setBusy(true); setError(null)
-    try {
-      await setWorkoutPhoto(session.user.id, workout.id, f, share)
-      setPreview(URL.createObjectURL(f))
-    } catch (e) {
-      setError(errMsg(e))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Sheet open={!!workout} onClose={onDone} title="¡Entreno terminado! 💪">
-      <div className="space-y-3">
-        <p className="text-zinc-300">{sets} series · {round(volume).toLocaleString('es-ES')} kg levantados en total.</p>
-        {preview ? (
-          <>
-            <img src={preview} alt="Foto del entreno" className="w-full max-h-96 object-cover rounded-2xl" />
-            <p className="text-accent font-semibold text-center">¡Foto guardada!{share ? ' Tu grupo ya puede verla.' : ''}</p>
-            <Button className="w-full" onClick={onDone}>Listo</Button>
-          </>
-        ) : (
-          <>
-            <p className="text-sm text-zinc-400">¿Te haces una foto para recordar este entreno?</p>
-            <ShareToggle value={share} onChange={setShare} />
-            <PhotoButtons onFile={upload} busy={busy} />
-            <ErrorText error={error} />
-            <Button variant="ghost" className="w-full" onClick={onDone} disabled={busy}>Ahora no</Button>
-          </>
-        )}
-      </div>
-    </Sheet>
   )
 }
 

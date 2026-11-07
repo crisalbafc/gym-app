@@ -19,7 +19,7 @@ export type WorkoutSet = {
 export type PlanItem = { exercise_id: string; sets: number | null; reps: string }
 export type Template = { id: string; name: string; exercise_ids: string[]; plan?: PlanItem[] }
 export type Food = {
-  id: string; name: string; kcal: number; protein: number; carbs: number; fat: number; last_grams: number
+  id: string; user_id?: string | null; name: string; kcal: number; protein: number; carbs: number; fat: number; last_grams: number
 }
 export type Meal = 'desayuno' | 'comida' | 'merienda' | 'cena' | 'snacks'
 export type FoodEntry = {
