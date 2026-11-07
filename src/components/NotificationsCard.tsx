@@ -83,14 +83,23 @@ export default function NotificationsCard() {
             <span className="block text-xs text-zinc-500">
               {(profile.remind_weight_every ?? 1) <= 1
                 ? 'Cada día a esta hora, si aún no te has pesado.'
-                : 'A esta hora, cuando hayan pasado esos días desde tu último peso (y al día siguiente si no te pesas).'}
+                : (profile.remind_weight_every ?? 1) >= 7 && 'remind_weight_dow' in profile
+                  ? 'Ese día de la semana a esta hora, si toca según la frecuencia elegida.'
+                  : 'A esta hora, cuando hayan pasado esos días desde tu último peso (y al día siguiente si no te pesas).'}
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {'remind_weight_every' in profile && (
               <select
                 value={profile.remind_weight_every ?? 1}
-                onChange={(e) => savePref({ remind_weight_every: Number(e.target.value), remind_weight_at: profile.remind_weight_at || '09:00' })}
+                onChange={(e) => {
+                  const every = Number(e.target.value)
+                  savePref({
+                    remind_weight_every: every,
+                    remind_weight_at: profile.remind_weight_at || '09:00',
+                    ...(every >= 7 && 'remind_weight_dow' in profile && profile.remind_weight_dow == null ? { remind_weight_dow: 1 } : {}),
+                  })
+                }}
                 className="h-10 flex-1 rounded-xl bg-zinc-800 border border-zinc-700 px-2"
                 aria-label="Cada cuánto"
               >
@@ -99,6 +108,18 @@ export default function NotificationsCard() {
                 <option value={7}>Cada semana</option>
                 <option value={14}>Cada 2 semanas</option>
                 <option value={30}>Cada mes</option>
+              </select>
+            )}
+            {'remind_weight_dow' in profile && (profile.remind_weight_every ?? 1) >= 7 && (
+              <select
+                value={profile.remind_weight_dow ?? 1}
+                onChange={(e) => savePref({ remind_weight_dow: Number(e.target.value) })}
+                className="h-10 rounded-xl bg-zinc-800 border border-zinc-700 px-2"
+                aria-label="Día de la semana"
+              >
+                {[1, 2, 3, 4, 5, 6, 0].map((d) => (
+                  <option key={d} value={d}>{['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'][d]}</option>
+                ))}
               </select>
             )}
             <input

@@ -10,6 +10,7 @@ export type Profile = {
   notify_rest?: boolean
   remind_weight_at?: string | null
   remind_weight_every?: number
+  remind_weight_dow?: number | null
   remind_train_days?: number
   tz?: string
 }
