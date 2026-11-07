@@ -19,6 +19,11 @@ export function fmtDay(day: string, opts: Intl.DateTimeFormatOptions = { weekday
 export function fmtDate(iso: string, opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' }) {
   return new Date(iso).toLocaleDateString('es-ES', opts)
 }
+/** Duración entre dos fechas: "45 min" o "1 h 20 min". */
+export function fmtDuration(startIso: string, endIso: string) {
+  const min = Math.max(0, Math.round((new Date(endIso).getTime() - new Date(startIso).getTime()) / 60000))
+  return min >= 60 ? `${Math.floor(min / 60)} h ${min % 60} min` : `${min} min`
+}
 /** Acepta "82,5" o "82.5". */
 export function num(v: string): number {
   const n = parseFloat(v.replace(',', '.'))

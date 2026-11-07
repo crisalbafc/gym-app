@@ -4,7 +4,7 @@ import { supabase } from '../supabase'
 import { useApp } from '../App'
 import type { Exercise, PlanItem, Template, Workout, WorkoutSet } from '../types'
 import { Button, Card, Empty, ErrorText, Input, SectionTitle, Sheet, Stepper } from '../components/ui'
-import { e1rm, errMsg, fmtDate, num, round } from '../lib/utils'
+import { e1rm, errMsg, fmtDate, fmtDuration, num, round } from '../lib/utils'
 import { HistoryPhoto } from '../components/WorkoutPhoto'
 import { FinishSummary, HypeScreen } from '../components/Motivation'
 import { deletePhotoFile } from '../lib/photos'
@@ -24,6 +24,14 @@ function readTargets(id: string): Record<string, string> {
 }
 function writeTargets(id: string, t: Record<string, string>) {
   try { localStorage.setItem(targetsKey(id), JSON.stringify(t)) } catch { /* sin almacenamiento */ }
+}
+// Hora de fin original de un entreno antiguo que estás editando
+const editKey = (id: string) => `wo-edit-end-${id}`
+function readEditEnd(id: string): string | null {
+  try { return localStorage.getItem(editKey(id)) } catch { return null }
+}
+function writeEditEnd(id: string, iso: string) {
+  try { localStorage.setItem(editKey(id), iso) } catch { /* sin almacenamiento */ }
 }
 
 export default function WorkoutScreen() {
@@ -81,6 +89,8 @@ function Idle({ onStarted }: { onStarted: (w: Workout, fresh: boolean) => void }
     onStarted(data as Workout, true)
   }
   async function reopen(w: Workout) {
+    // Guardamos la hora real de fin para no perderla al editar
+    if (w.ended_at) writeEditEnd(w.id, w.ended_at)
     const { data, error } = await supabase.from('workouts').update({ ended_at: null }).eq('id', w.id).select().single()
     if (error) return setError(errMsg(error))
     onStarted(data as Workout, false)
@@ -150,7 +160,7 @@ function Idle({ onStarted }: { onStarted: (w: Workout, fresh: boolean) => void }
                 <div className="flex-1">
                   <div className="font-semibold flex items-center gap-1.5">{w.name || 'Entreno'} · <span className="text-zinc-400 font-normal">{fmtDate(w.started_at, { weekday: 'short', day: 'numeric', month: 'short' })}</span>
                     {w.photo_path && <Camera size={14} className="text-accent" aria-label="Tiene foto" />}</div>
-                  <div className="text-xs text-zinc-500">{byEx.length} ejercicios · {sets.length} series</div>
+                  <div className="text-xs text-zinc-500">{w.ended_at ? `${fmtDuration(w.started_at, w.ended_at)} · ` : ''}{byEx.length} ejercicios · {sets.length} series</div>
                 </div>
                 {isOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
               </button>
@@ -195,9 +205,11 @@ function ActiveWorkout({ workout, onEnd }: { workout: Workout; onEnd: () => void
   const [targets] = useState<Record<string, string>>(() => readTargets(workout.id))
   const [picker, setPicker] = useState(false)
   const [saveTpl, setSaveTpl] = useState(false)
-  const [finished, setFinished] = useState(false)
+  const [finishedAt, setFinishedAt] = useState<string | null>(null)
   const [elapsed, setElapsed] = useState('')
   const [error, setError] = useState<string | null>(null)
+  // Si vienes de "Editar" en el historial, el entreno ya terminó: no hay cronómetro
+  const [editEnd] = useState<string | null>(() => readEditEnd(workout.id))
 
   useEffect(() => {
     supabase.from('workout_sets').select('*').eq('workout_id', workout.id).order('created_at')
@@ -205,15 +217,13 @@ function ActiveWorkout({ workout, onEnd }: { workout: Workout; onEnd: () => void
   }, [workout.id])
 
   useEffect(() => {
-    const tick = () => {
-      const s = Math.floor((Date.now() - new Date(workout.started_at).getTime()) / 1000)
-      const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60)
-      setElapsed(h ? `${h} h ${m} min` : `${m} min`)
-    }
+    const end = finishedAt || editEnd
+    const tick = () => setElapsed(fmtDuration(workout.started_at, end || new Date().toISOString()))
     tick()
+    if (end) return // entreno terminado: duración fija
     const t = setInterval(tick, 30000)
     return () => clearInterval(t)
-  }, [workout.started_at])
+  }, [workout.started_at, finishedAt, editEnd])
 
   const order = useMemo(() => {
     const ids: string[] = []
@@ -247,7 +257,7 @@ function ActiveWorkout({ workout, onEnd }: { workout: Workout; onEnd: () => void
       .insert({ workout_id: workout.id, exercise_id: exerciseId, weight, reps }).select().single()
     if (error) { setError(errMsg(error)); return false }
     setSets((s) => [...s, data as WorkoutSet])
-    if (profile.rest_seconds > 0) setRestEnd(Date.now() + profile.rest_seconds * 1000)
+    if (profile.rest_seconds > 0 && !editEnd) setRestEnd(Date.now() + profile.rest_seconds * 1000)
     return true
   }
   async function deleteSet(id: string) {
@@ -261,14 +271,21 @@ function ActiveWorkout({ workout, onEnd }: { workout: Workout; onEnd: () => void
       await supabase.from('workouts').delete().eq('id', workout.id)
       done()
     } else {
-      const { error } = await supabase.from('workouts').update({ ended_at: new Date().toISOString() }).eq('id', workout.id)
+      // Al editar un entreno antiguo se conserva su hora de fin real
+      const end = editEnd || new Date().toISOString()
+      const { error } = await supabase.from('workouts').update({ ended_at: end }).eq('id', workout.id)
       if (error) return setError(errMsg(error))
       setRestEnd(null)
-      setFinished(true) // muestra la ventana de "¿te haces una foto?"
+      if (editEnd) done()
+      else setFinishedAt(end) // muestra el resumen
     }
   }
   function done() {
-    try { localStorage.removeItem(pendingKey(workout.id)); localStorage.removeItem(targetsKey(workout.id)) } catch { /* nada */ }
+    try {
+      localStorage.removeItem(pendingKey(workout.id))
+      localStorage.removeItem(targetsKey(workout.id))
+      localStorage.removeItem(editKey(workout.id))
+    } catch { /* nada */ }
     onEnd()
   }
 
@@ -277,10 +294,13 @@ function ActiveWorkout({ workout, onEnd }: { workout: Workout; onEnd: () => void
     <div>
       <div className="flex items-start justify-between mb-1">
         <div>
-          <h1 className="text-2xl font-extrabold">{workout.name || 'Entreno de hoy'}</h1>
+          {editEnd && <p className="text-xs font-semibold text-sky-300 uppercase tracking-wide">Editando entreno del {fmtDate(workout.started_at, { weekday: 'short', day: 'numeric', month: 'short' })}</p>}
+          <h1 className="text-2xl font-extrabold">{workout.name || (editEnd ? 'Entreno' : 'Entreno de hoy')}</h1>
           <p className="text-sm text-zinc-400">{elapsed} · {order.length} ejercicios · {sets.length} series</p>
         </div>
-        <Button onClick={finish} className="!min-h-10"><Flag size={16} /> Terminar</Button>
+        <Button onClick={finish} className="!min-h-10">
+          {editEnd ? <><Save size={16} /> Guardar cambios</> : <><Flag size={16} /> Terminar</>}
+        </Button>
       </div>
       <ErrorText error={error} />
 
@@ -312,7 +332,7 @@ function ActiveWorkout({ workout, onEnd }: { workout: Workout; onEnd: () => void
 
       <ExercisePicker open={picker} onClose={() => setPicker(false)} onPick={addExercise} />
       <SaveTemplate open={saveTpl} onClose={() => setSaveTpl(false)} plan={order.map((id) => planFromSets(id, sets.filter((s) => s.exercise_id === id)))} defaultName={workout.name || ''} />
-      <FinishSummary workout={finished ? workout : null} sets={sets} exById={exById} onDone={done} />
+      <FinishSummary workout={finishedAt ? { ...workout, ended_at: finishedAt } : null} sets={sets} exById={exById} onDone={done} />
     </div>
   )
 }

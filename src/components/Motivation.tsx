@@ -6,7 +6,7 @@ import type { Exercise, Workout, WorkoutSet } from '../types'
 import { Button, ErrorText, Sheet } from './ui'
 import { PhotoButtons, ShareToggle } from './WorkoutPhoto'
 import { setWorkoutPhoto } from '../lib/photos'
-import { errMsg, round } from '../lib/utils'
+import { errMsg, fmtDuration, round } from '../lib/utils'
 
 const pick = <T,>(l: T[]) => l[Math.floor(Math.random() * l.length)]
 
@@ -65,8 +65,8 @@ export function FinishSummary({ workout, sets, exById, onDone }: {
 
   const exIds = useMemo(() => [...new Set(sets.map((s) => s.exercise_id))], [sets])
   const reps = sets.reduce((t, s) => t + s.reps, 0)
-  const minutes = workout ? Math.max(1, Math.round((Date.now() - new Date(workout.started_at).getTime()) / 60000)) : 0
-  const duration = minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`
+  // Duración fija: de la hora de inicio a la hora en que pulsaste "Terminar"
+  const duration = workout ? fmtDuration(workout.started_at, workout.ended_at || workout.started_at) : ''
 
   // Récords: el peso máximo de hoy supera tu máximo anterior en ese ejercicio
   useEffect(() => {
