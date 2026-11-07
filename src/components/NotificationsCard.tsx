@@ -77,12 +77,30 @@ export default function NotificationsCard() {
           <input type="checkbox" checked={profile.notify_rest !== false} onChange={(e) => savePref({ notify_rest: e.target.checked })} className="h-6 w-6 accent-lime-400 shrink-0" />
         </label>
 
-        <label className="flex items-center justify-between gap-3 min-h-12">
-          <span>
+        <div className="space-y-2">
+          <div>
             <span className="block font-semibold">Recordar pesarme</span>
-            <span className="block text-xs text-zinc-500">Cada día a esta hora, si aún no te has pesado.</span>
-          </span>
-          <span className="flex items-center gap-2 shrink-0">
+            <span className="block text-xs text-zinc-500">
+              {(profile.remind_weight_every ?? 1) <= 1
+                ? 'Cada día a esta hora, si aún no te has pesado.'
+                : 'A esta hora, cuando hayan pasado esos días desde tu último peso (y al día siguiente si no te pesas).'}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {'remind_weight_every' in profile && (
+              <select
+                value={profile.remind_weight_every ?? 1}
+                onChange={(e) => savePref({ remind_weight_every: Number(e.target.value), remind_weight_at: profile.remind_weight_at || '09:00' })}
+                className="h-10 flex-1 rounded-xl bg-zinc-800 border border-zinc-700 px-2"
+                aria-label="Cada cuánto"
+              >
+                <option value={1}>Cada día</option>
+                <option value={3}>Cada 3 días</option>
+                <option value={7}>Cada semana</option>
+                <option value={14}>Cada 2 semanas</option>
+                <option value={30}>Cada mes</option>
+              </select>
+            )}
             <input
               type="time"
               value={profile.remind_weight_at?.slice(0, 5) || ''}
@@ -93,8 +111,8 @@ export default function NotificationsCard() {
             {profile.remind_weight_at && (
               <button className="text-xs text-zinc-400 underline" onClick={() => savePref({ remind_weight_at: null })}>Quitar</button>
             )}
-          </span>
-        </label>
+          </div>
+        </div>
 
         <label className="flex items-center justify-between gap-3 min-h-12">
           <span>

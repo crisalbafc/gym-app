@@ -9,6 +9,7 @@ export type Profile = {
   rest_seconds: number
   notify_rest?: boolean
   remind_weight_at?: string | null
+  remind_weight_every?: number
   remind_train_days?: number
   tz?: string
 }
