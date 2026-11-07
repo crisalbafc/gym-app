@@ -7,6 +7,10 @@ export type Profile = {
   carbs_goal: number
   fat_goal: number
   rest_seconds: number
+  notify_rest?: boolean
+  remind_weight_at?: string | null
+  remind_train_days?: number
+  tz?: string
 }
 export type Exercise = { id: string; user_id: string | null; name: string; muscle: string }
 export type Workout = {

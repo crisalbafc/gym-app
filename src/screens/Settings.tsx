@@ -14,6 +14,7 @@ import type { Profile } from '../types'
 import { Button, Card, ErrorText, Input, SectionTitle } from '../components/ui'
 import { downloadCsv, errMsg, isoDay, num } from '../lib/utils'
 import { fetchAll } from '../lib/fetchAll'
+import NotificationsCard from '../components/NotificationsCard'
 
 export default function Settings() {
   const { profile, setProfile, session, exercises, go, isAdmin } = useApp()
@@ -123,6 +124,9 @@ export default function Settings() {
       </Card>
 
       <Button className="w-full mt-4" onClick={save}>{saved ? <><Check size={18} /> Guardado</> : 'Guardar cambios'}</Button>
+
+      <SectionTitle>Notificaciones</SectionTitle>
+      <NotificationsCard />
 
       <SectionTitle>Copia de seguridad</SectionTitle>
       <Button variant="secondary" className="w-full" onClick={exportAll} disabled={exporting}>

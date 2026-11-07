@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Timer } from 'lucide-react'
+import { scheduleRestPush } from '../lib/push'
 
 const KEY = 'rest-end'
 export function readRestEnd(): number | null {
@@ -36,11 +37,19 @@ export default function RestTimer({ end, onChange }: { end: number; onChange: (v
   const [left, setLeft] = useState(() => Math.ceil((end - Date.now()) / 1000))
   const fired = useRef(false)
 
+  const pushCancelled = useRef(false)
+
   useEffect(() => {
     fired.current = false
+    pushCancelled.current = false
     const tick = () => {
       const ms = end - Date.now()
       setLeft(Math.ceil(ms / 1000))
+      // Si estás mirando la app al final, pita aquí y no hace falta la notificación
+      if (ms > 0 && ms < 2500 && !pushCancelled.current && document.visibilityState === 'visible') {
+        pushCancelled.current = true
+        scheduleRestPush(null)
+      }
       if (ms > 0 || fired.current) return
       fired.current = true
       const onTime = document.visibilityState === 'visible' && -ms < 2500

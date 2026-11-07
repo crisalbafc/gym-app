@@ -14,6 +14,7 @@ import Settings from './screens/Settings'
 import Privacy from './screens/Privacy'
 import Admin from './screens/Admin'
 import RestTimer, { readRestEnd, saveRestEnd } from './components/RestTimer'
+import { scheduleRestPush } from './lib/push'
 
 type Ctx = {
   session: Session
@@ -85,7 +86,12 @@ function LoggedIn({ session }: { session: Session }) {
   const [error, setError] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
   const [restEnd, setRestEndRaw] = useState<number | null>(readRestEnd)
-  const setRestEnd = useCallback((v: number | null) => { setRestEndRaw(v); saveRestEnd(v) }, [])
+  const notifyRest = profile?.notify_rest !== false
+  const setRestEnd = useCallback((v: number | null) => {
+    setRestEndRaw(v); saveRestEnd(v)
+    // Aviso al móvil por si sales de la app durante el descanso
+    if (notifyRest || v === null) scheduleRestPush(v)
+  }, [notifyRest])
 
   useEffect(() => {
     supabase.rpc('is_admin').then(({ data }) => setIsAdmin(data === true))

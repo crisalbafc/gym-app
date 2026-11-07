@@ -3,3 +3,4 @@ dist
 .env.local
 public/icon-*.png
 *.tsbuildinfo
+secretos-notificaciones.txt
