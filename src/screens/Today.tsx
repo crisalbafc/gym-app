@@ -5,6 +5,7 @@ import { useApp } from '../App'
 import type { FoodEntry, Meal } from '../types'
 import { Card, SectionTitle } from '../components/ui'
 import { MacroBars, AddFood } from './Diet'
+import CoachMessages from '../components/CoachMessages'
 import { fmtDate, isoDay, round } from '../lib/utils'
 
 type PR = { display_name: string; exercise_name: string; weight: number; reps: number; done_at: string }
@@ -60,6 +61,8 @@ export default function Today() {
         <QuickBtn icon={<Apple />} label="Añadir comida" onClick={() => setAddFood(true)} />
         <QuickBtn icon={<Scale />} label="Apuntar peso" onClick={() => go('cuerpo')} />
       </div>
+
+      <CoachMessages />
 
       <SectionTitle>Resumen de hoy</SectionTitle>
       <div className="space-y-3">

@@ -127,7 +127,7 @@ function Idle({ onStarted }: { onStarted: (w: Workout, fresh: boolean) => void }
           {templates.map((t) => (
             <Card key={t.id} className="flex items-center gap-2 !p-3">
               <button className="flex-1 min-w-0 text-left" onClick={() => setEditing(t)}>
-                <div className="font-semibold truncate">{t.name}</div>
+                <div className="font-semibold truncate">{t.assigned_by && <span className="text-xs text-sky-300 font-semibold mr-1">🧑‍🏫 Entrenador ·</span>}{t.name}</div>
                 <div className="text-xs text-zinc-500 truncate">
                   {(t.plan?.length ? t.plan : t.exercise_ids.map((id) => ({ exercise_id: id, sets: null, reps: '' })))
                     .map((p) => exName[p.exercise_id] && `${exName[p.exercise_id]}${p.sets ? ` ${p.sets}×${p.reps || '?'}` : ''}`)
