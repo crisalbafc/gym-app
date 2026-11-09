@@ -3,5 +3,7 @@
 -- (entrenos, dieta, peso, notas, mensajes y rutinas). Tu cuenta no se toca.
 -- =====================================================================
 delete from training_groups where name like '%(demo)';
+delete from class_templates where name like '%(demo)';
+delete from class_sessions where name like '%(demo)';
 delete from auth.users where email like 'demo.%@gymlog.test';
 select 'Clientes de ejemplo borrados' as resultado;

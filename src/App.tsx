@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { Home, Dumbbell, Apple, Scale, LineChart, Users, Settings as SettingsIcon } from 'lucide-react'
+import { Home, Dumbbell, Apple, Scale, LineChart, Users, Settings as SettingsIcon, CalendarDays } from 'lucide-react'
 import { supabase, isConfigured, setMe } from './supabase'
 import type { Exercise, Profile, Tab } from './types'
 import Auth, { NewPassword } from './screens/Auth'
@@ -13,6 +13,8 @@ import Group from './screens/Group'
 import Settings from './screens/Settings'
 import Privacy from './screens/Privacy'
 import Admin from './screens/Admin'
+import ClassesScreen from './screens/Classes'
+import { IS_PRO } from './edition'
 import RestTimer, { readRestEnd, saveRestEnd } from './components/RestTimer'
 import { scheduleRestPush } from './lib/push'
 
@@ -136,6 +138,7 @@ function LoggedIn({ session }: { session: Session }) {
               <Dumbbell className="text-accent" size={22} /> GymLog
             </button>
             <div className="flex gap-1">
+              {IS_PRO && <IconBtn active={tab === 'clases'} onClick={() => go('clases')} label="Clases"><CalendarDays size={20} /></IconBtn>}
               <IconBtn active={tab === 'grupo'} onClick={() => go('grupo')} label="Grupo de amigos"><Users size={20} /></IconBtn>
               <IconBtn active={tab === 'ajustes' || tab === 'privacidad' || tab === 'admin'} onClick={() => go('ajustes')} label="Ajustes"><SettingsIcon size={20} /></IconBtn>
             </div>
@@ -149,6 +152,7 @@ function LoggedIn({ session }: { session: Session }) {
           {tab === 'cuerpo' && <Body />}
           {tab === 'progreso' && <Progress />}
           {tab === 'grupo' && <Group />}
+          {tab === 'clases' && IS_PRO && <ClassesScreen />}
           {tab === 'ajustes' && <Settings />}
           {tab === 'privacidad' && <Privacy />}
           {tab === 'admin' && isAdmin && <Admin />}
