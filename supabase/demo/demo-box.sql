@@ -53,7 +53,7 @@ begin
     (coach, 'aviso', 'Horario especial en festivos (demo)', 'El jueves que viene abrimos solo de 9:00 a 13:00. ¡Reservad con tiempo!', true, now() - interval '1 day'),
     (coach, 'consejo', 'Cómo mejorar tu Fran (demo)', 'Divide los thrusters en series pequeñas desde el principio (por ejemplo 11-10) y no sueltes la barra entre series largas. Respira arriba de cada repetición.', false, now() - interval '3 days'),
     (coach, 'receta', 'Bowl post-entreno (demo)', '150 g de arroz, 150 g de pollo, medio aguacate, tomate cherry y un chorrito de aceite de oliva. ~650 kcal y 45 g de proteína.', false, now() - interval '6 days')
-  returning id into p;
+  ;
   insert into post_likes (post_id, user_id)
   select ps.id, u from posts ps, unnest(array[laura, marta, javier]) u
   where ps.coach_id = coach and ps.title like '%(demo)' and random() < 0.75
