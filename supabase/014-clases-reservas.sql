@@ -11,7 +11,7 @@ alter table public.coaches add column if not exists cancel_hours int not null de
 -- Tipos de clase con su horario semanal (como las plantillas de FitBox)
 create table if not exists public.class_templates (
   id uuid primary key default gen_random_uuid(),
-  coach_id uuid not null default auth.uid() references public.coaches(user_id) on delete cascade,
+  coach_id uuid not null default public.my_center() references public.coaches(user_id) on delete cascade,
   name text not null,
   color text not null default '#a3e635',
   duration_min int not null default 60 check (duration_min between 10 and 300),
@@ -24,7 +24,7 @@ create table if not exists public.class_templates (
 
 create table if not exists public.class_sessions (
   id uuid primary key default gen_random_uuid(),
-  coach_id uuid not null default auth.uid() references public.coaches(user_id) on delete cascade,
+  coach_id uuid not null default public.my_center() references public.coaches(user_id) on delete cascade,
   template_id uuid references public.class_templates(id) on delete set null,
   name text not null,
   color text not null default '#a3e635',
@@ -61,19 +61,19 @@ $$;
 
 drop policy if exists "coach templates" on public.class_templates;
 create policy "coach templates" on public.class_templates for all
-  using (coach_id = auth.uid()) with check (coach_id = auth.uid());
+  using (coach_id = public.my_center()) with check (coach_id = public.my_center());
 drop policy if exists "members see templates" on public.class_templates;
 create policy "members see templates" on public.class_templates for select using (public.is_member_of(coach_id));
 
 drop policy if exists "coach sessions" on public.class_sessions;
 create policy "coach sessions" on public.class_sessions for all
-  using (coach_id = auth.uid()) with check (coach_id = auth.uid());
+  using (coach_id = public.my_center()) with check (coach_id = public.my_center());
 drop policy if exists "members see sessions" on public.class_sessions;
 create policy "members see sessions" on public.class_sessions for select using (public.is_member_of(coach_id));
 
 create or replace function public.owns_class_session(p_session uuid)
 returns boolean language sql security definer stable set search_path = public as $$
-  select exists (select 1 from class_sessions s where s.id = p_session and s.coach_id = auth.uid())
+  select exists (select 1 from class_sessions s where s.id = p_session and s.coach_id = public.my_center())
 $$;
 -- Reservas: cada socio ve las suyas; el centro ve las de sus clases.
 -- Crear/cancelar siempre pasa por las funciones de abajo (aplican las reglas).
@@ -176,11 +176,11 @@ declare t record; d date; n int := 0; tz text; k int;
 begin
   select p.tz into tz from profiles p where p.id = auth.uid();
   tz := coalesce(tz, 'Europe/Madrid');
-  for t in select * from class_templates where coach_id = auth.uid() and active and start_time is not null and cardinality(weekdays) > 0 loop
+  for t in select * from class_templates where coach_id = public.my_center() and active and start_time is not null and cardinality(weekdays) > 0 loop
     for d in select generate_series(current_date, current_date + p_weeks * 7 - 1, interval '1 day')::date loop
       if extract(dow from d)::int = any(t.weekdays) then
         insert into class_sessions (coach_id, template_id, name, color, starts_at, duration_min, capacity)
-        values (auth.uid(), t.id, t.name, t.color, (d + t.start_time) at time zone tz, t.duration_min, t.capacity)
+        values (public.my_center(), t.id, t.name, t.color, (d + t.start_time) at time zone tz, t.duration_min, t.capacity)
         on conflict (template_id, starts_at) do nothing;
         get diagnostics k = row_count;
         n := n + k;
@@ -195,7 +195,7 @@ create or replace function public.coach_add_attendee(p_session uuid, p_client uu
 returns text language plpgsql security definer set search_path = public as $$
 declare s record; n int; pos int;
 begin
-  select * into s from class_sessions where id = p_session and coach_id = auth.uid() for update;
+  select * into s from class_sessions where id = p_session and coach_id = public.my_center() for update;
   if s.id is null then raise exception 'No es tu clase'; end if;
   if not public.coach_sees(p_client, 'any') then raise exception 'No es tu socio'; end if;
   if exists (select 1 from bookings where session_id = p_session and user_id = p_client and status <> 'cancelada') then
@@ -217,7 +217,7 @@ returns void language plpgsql security definer set search_path = public as $$
 declare b record;
 begin
   select bk.* into b from bookings bk join class_sessions s on s.id = bk.session_id
-  where bk.id = p_booking and s.coach_id = auth.uid();
+  where bk.id = p_booking and s.coach_id = public.my_center();
   if b.id is null then raise exception 'No es tu clase'; end if;
   update bookings set status = 'cancelada', position = null, checked_in_at = null where id = p_booking;
   if b.status = 'confirmada' then perform public.promote_waitlist(b.session_id);
@@ -234,7 +234,7 @@ returns void language plpgsql security definer set search_path = public as $$
 begin
   update bookings bk set checked_in_at = case when p_on then now() else null end
   from class_sessions s
-  where bk.id = p_booking and s.id = bk.session_id and s.coach_id = auth.uid() and bk.status = 'confirmada';
+  where bk.id = p_booking and s.id = bk.session_id and s.coach_id = public.my_center() and bk.status = 'confirmada';
   if not found then raise exception 'Solo se puede marcar asistencia en reservas confirmadas de tus clases'; end if;
 end $$;
 
@@ -243,7 +243,7 @@ create or replace function public.coach_cancel_session(p_session uuid)
 returns int language plpgsql security definer set search_path = public as $$
 declare s record; n int;
 begin
-  select * into s from class_sessions where id = p_session and coach_id = auth.uid();
+  select * into s from class_sessions where id = p_session and coach_id = public.my_center();
   if s.id is null then raise exception 'No es tu clase'; end if;
   update class_sessions set status = 'cancelada' where id = p_session;
   insert into scheduled_pushes (user_id, send_at, title, body, tag)
@@ -257,7 +257,7 @@ end $$;
 
 create or replace function public.update_cancel_hours(p_hours int)
 returns void language sql security definer set search_path = public as $$
-  update coaches set cancel_hours = greatest(0, least(p_hours, 72)) where user_id = auth.uid()
+  update coaches set cancel_hours = greatest(0, least(p_hours, 72)) where user_id = public.my_center()
 $$;
 
 grant select, insert, update, delete on public.class_templates, public.class_sessions to authenticated;

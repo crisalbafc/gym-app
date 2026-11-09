@@ -8,7 +8,7 @@ alter table public.coaches add column if not exists require_plan boolean not nul
 
 create table if not exists public.membership_plans (
   id uuid primary key default gen_random_uuid(),
-  coach_id uuid not null default auth.uid() references public.coaches(user_id) on delete cascade,
+  coach_id uuid not null default public.my_center() references public.coaches(user_id) on delete cascade,
   name text not null,
   price numeric(8,2) not null default 0,
   type text not null default 'ilimitado' check (type in ('ilimitado', 'creditos')),
@@ -50,18 +50,18 @@ alter table public.memberships enable row level security;
 alter table public.payments enable row level security;
 
 drop policy if exists "coach plans" on public.membership_plans;
-create policy "coach plans" on public.membership_plans for all using (coach_id = auth.uid()) with check (coach_id = auth.uid());
+create policy "coach plans" on public.membership_plans for all using (coach_id = public.my_center()) with check (coach_id = public.my_center());
 drop policy if exists "members see plans" on public.membership_plans;
 create policy "members see plans" on public.membership_plans for select using (public.is_member_of(coach_id));
 
 drop policy if exists "coach memberships" on public.memberships;
-create policy "coach memberships" on public.memberships for select using (coach_id = auth.uid());
+create policy "coach memberships" on public.memberships for select using (coach_id = public.my_center());
 drop policy if exists "own memberships" on public.memberships;
 create policy "own memberships" on public.memberships for select using (client_id = auth.uid());
 
 drop policy if exists "coach payments" on public.payments;
-create policy "coach payments" on public.payments for all using (coach_id = auth.uid())
-  with check (coach_id = auth.uid() and public.coach_sees(client_id, 'any'));
+create policy "coach payments" on public.payments for all using (coach_id = public.my_center())
+  with check (coach_id = public.my_center() and public.coach_sees(client_id, 'any'));
 drop policy if exists "own payments" on public.payments;
 create policy "own payments" on public.payments for select using (client_id = auth.uid());
 
@@ -189,7 +189,7 @@ returns void language plpgsql security definer set search_path = public as $$
 declare b record;
 begin
   select bk.* into b from bookings bk join class_sessions s on s.id = bk.session_id
-  where bk.id = p_booking and s.coach_id = auth.uid();
+  where bk.id = p_booking and s.coach_id = public.my_center();
   if b.id is null then raise exception 'No es tu clase'; end if;
   update bookings set status = 'cancelada', position = null, checked_in_at = null where id = p_booking;
   if b.status = 'confirmada' then
@@ -204,7 +204,7 @@ create or replace function public.coach_cancel_session(p_session uuid)
 returns int language plpgsql security definer set search_path = public as $$
 declare s record; n int; b record;
 begin
-  select * into s from class_sessions where id = p_session and coach_id = auth.uid();
+  select * into s from class_sessions where id = p_session and coach_id = public.my_center();
   if s.id is null then raise exception 'No es tu clase'; end if;
   update class_sessions set status = 'cancelada' where id = p_session;
   insert into scheduled_pushes (user_id, send_at, title, body, tag)
@@ -225,13 +225,13 @@ create or replace function public.assign_plan(p_client uuid, p_plan uuid, p_star
 returns uuid language plpgsql security definer set search_path = public as $$
 declare p public.membership_plans; new_id uuid;
 begin
-  select * into p from membership_plans where id = p_plan and coach_id = auth.uid();
+  select * into p from membership_plans where id = p_plan and coach_id = public.my_center();
   if p.id is null then raise exception 'Plan no encontrado'; end if;
   if not public.coach_sees(p_client, 'any') then raise exception 'No es tu socio'; end if;
   update memberships set status = 'expirada', end_date = least(end_date, current_date)
-  where coach_id = auth.uid() and client_id = p_client and status = 'activa';
+  where coach_id = public.my_center() and client_id = p_client and status = 'activa';
   insert into memberships (coach_id, client_id, plan_id, start_date, end_date, credits_left)
-  values (auth.uid(), p_client, p_plan, p_start, (p_start + interval '1 month')::date - 1,
+  values (public.my_center(), p_client, p_plan, p_start, (p_start + interval '1 month')::date - 1,
           case when p.type = 'creditos' then p.credits end)
   returning memberships.id into new_id;
   return new_id;
@@ -241,7 +241,7 @@ create or replace function public.renew_membership(p_membership uuid, p_amount n
 returns void language plpgsql security definer set search_path = public as $$
 declare m public.memberships; p public.membership_plans;
 begin
-  select * into m from memberships where id = p_membership and coach_id = auth.uid();
+  select * into m from memberships where id = p_membership and coach_id = public.my_center();
   if m.id is null then raise exception 'Membresía no encontrada'; end if;
   select * into p from membership_plans where id = m.plan_id;
   update memberships set status = 'activa',
@@ -250,18 +250,18 @@ begin
   where id = m.id;
   if p_amount is not null then
     insert into payments (coach_id, client_id, membership_id, amount, method)
-    values (auth.uid(), m.client_id, m.id, p_amount, coalesce(p_method, 'efectivo'));
+    values (public.my_center(), m.client_id, m.id, p_amount, coalesce(p_method, 'efectivo'));
   end if;
 end $$;
 
 create or replace function public.cancel_membership(p_membership uuid)
 returns void language sql security definer set search_path = public as $$
-  update memberships set status = 'cancelada' where id = p_membership and coach_id = auth.uid()
+  update memberships set status = 'cancelada' where id = p_membership and coach_id = public.my_center()
 $$;
 
 create or replace function public.update_require_plan(p_on boolean)
 returns void language sql security definer set search_path = public as $$
-  update coaches set require_plan = p_on where user_id = auth.uid()
+  update coaches set require_plan = p_on where user_id = public.my_center()
 $$;
 
 -- Resumen de planes de todos los socios
@@ -286,7 +286,7 @@ language sql security definer stable set search_path = public as $$
     order by (mm.status = 'activa') desc, mm.end_date desc limit 1
   ) m on true
   left join membership_plans p on p.id = m.plan_id
-  where c.coach_id = auth.uid()
+  where c.coach_id = public.my_center()
 $$;
 
 -- ---------- Para el SOCIO ----------

@@ -13,6 +13,32 @@ create table if not exists public.coaches (
   created_at timestamptz not null default now()
 );
 
+-- Equipo del centro: entrenadores (y administradores) que trabajan para el centro.
+-- El "centro" es la cuenta del dueño (coaches.user_id).
+create table if not exists public.center_staff (
+  center_id uuid not null references public.coaches(user_id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  role text not null default 'entrenador' check (role in ('entrenador', 'admin')),
+  created_at timestamptz not null default now(),
+  primary key (center_id, user_id)
+);
+
+-- Centro de quien ha iniciado sesión: el suyo si es el dueño, o el centro en el que trabaja
+create or replace function public.my_center()
+returns uuid language sql security definer stable set search_path = public as $$
+  select coalesce(
+    (select user_id from coaches where user_id = auth.uid()),
+    (select center_id from center_staff where user_id = auth.uid() order by created_at limit 1))
+$$;
+
+-- ¿Puede administrar el centro? (el dueño o un miembro del equipo con rol admin)
+create or replace function public.is_center_admin()
+returns boolean language sql security definer stable set search_path = public as $$
+  select exists (select 1 from coaches where user_id = auth.uid())
+      or exists (select 1 from center_staff where user_id = auth.uid() and role = 'admin')
+$$;
+grant execute on function public.my_center(), public.is_center_admin() to authenticated;
+
 -- Relación entrenador-cliente. El CLIENTE decide qué comparte (share_*).
 -- El ENTRENADOR gestiona estado y próxima revisión.
 create table if not exists public.coach_clients (
@@ -31,7 +57,7 @@ create table if not exists public.coach_clients (
 -- Notas privadas del entrenador sobre cada cliente (el cliente NO las ve)
 create table if not exists public.coach_notes (
   id uuid primary key default gen_random_uuid(),
-  coach_id uuid not null default auth.uid() references public.coaches(user_id) on delete cascade,
+  coach_id uuid not null default public.my_center() references public.coaches(user_id) on delete cascade,
   client_id uuid not null references auth.users(id) on delete cascade,
   body text not null,
   created_at timestamptz not null default now()
@@ -62,7 +88,7 @@ create or replace function public.coach_sees(p_client uuid, p_what text)
 returns boolean language sql security definer stable set search_path = public as $$
   select exists (
     select 1 from coach_clients c
-    where c.coach_id = auth.uid() and c.client_id = p_client
+    where c.coach_id = public.my_center() and c.client_id = p_client
       and case p_what
             when 'workouts' then c.share_workouts
             when 'diet' then c.share_diet
@@ -76,23 +102,23 @@ $$;
 
 drop policy if exists "coach own" on public.coaches;
 create policy "coach own" on public.coaches for select
-  using (user_id = auth.uid()
+  using (user_id = public.my_center()
          or exists (select 1 from coach_clients c where c.coach_id = coaches.user_id and c.client_id = auth.uid()));
 
 drop policy if exists "both sides see link" on public.coach_clients;
 create policy "both sides see link" on public.coach_clients for select
-  using (coach_id = auth.uid() or client_id = auth.uid());
+  using (coach_id = public.my_center() or client_id = auth.uid());
 drop policy if exists "both sides can unlink" on public.coach_clients;
 create policy "both sides can unlink" on public.coach_clients for delete
-  using (coach_id = auth.uid() or client_id = auth.uid());
+  using (coach_id = public.my_center() or client_id = auth.uid());
 
 drop policy if exists "coach notes" on public.coach_notes;
 create policy "coach notes" on public.coach_notes for all
-  using (coach_id = auth.uid()) with check (coach_id = auth.uid() and public.coach_sees(client_id, 'any'));
+  using (coach_id = public.my_center()) with check (coach_id = public.my_center() and public.coach_sees(client_id, 'any'));
 
 drop policy if exists "see own messages" on public.coach_messages;
 create policy "see own messages" on public.coach_messages for select
-  using (coach_id = auth.uid() or client_id = auth.uid());
+  using (coach_id = public.my_center() or client_id = auth.uid());
 
 -- Lectura de datos del cliente por su entrenador, según lo que comparta
 drop policy if exists "coach reads" on public.workouts;
@@ -111,8 +137,8 @@ create policy "coach reads" on public.profiles for select using (public.coach_se
 -- Rutinas: el entrenador gestiona las que él asigna a sus clientes
 drop policy if exists "coach assigns" on public.templates;
 create policy "coach assigns" on public.templates for all
-  using (assigned_by = auth.uid() and public.coach_sees(user_id, 'any'))
-  with check (assigned_by = auth.uid() and public.coach_sees(user_id, 'any'));
+  using (assigned_by = public.my_center() and public.coach_sees(user_id, 'any'))
+  with check (assigned_by = public.my_center() and public.coach_sees(user_id, 'any'));
 
 -- Ejercicios: el entrenador ve los ejercicios propios de sus clientes
 create or replace function public.can_see_exercise(p_id uuid, p_owner uuid)
@@ -124,9 +150,9 @@ returns boolean language sql security definer stable set search_path = public as
       join group_members b on b.group_id = a.group_id
       where a.user_id = auth.uid() and b.user_id = p_owner)
     or exists (select 1 from workout_sets s where s.exercise_id = p_id and s.user_id = auth.uid())
-    or exists (select 1 from coach_clients c where c.coach_id = auth.uid() and c.client_id = p_owner)
+    or exists (select 1 from coach_clients c where c.coach_id = public.my_center() and c.client_id = p_owner)
     or exists (select 1 from workout_sets s join coach_clients c on c.client_id = s.user_id
-               where s.exercise_id = p_id and c.coach_id = auth.uid() and c.share_workouts)
+               where s.exercise_id = p_id and c.coach_id = public.my_center() and c.share_workouts)
 $$;
 
 -- Fotos: el entrenador las ve si el cliente comparte fotos con él
@@ -192,7 +218,7 @@ returns table (
   from coach_clients c
   join profiles p on p.id = c.client_id
   join auth.users u on u.id = c.client_id
-  where c.coach_id = auth.uid()
+  where c.coach_id = public.my_center()
   order by p.display_name
 $$;
 
@@ -200,7 +226,7 @@ create or replace function public.coach_update_client(p_client uuid, p_status te
 returns void language plpgsql security definer set search_path = public as $$
 begin
   update coach_clients set status = p_status, next_review = p_next_review
-  where coach_id = auth.uid() and client_id = p_client;
+  where coach_id = public.my_center() and client_id = p_client;
   if not found then raise exception 'No es tu cliente'; end if;
 end $$;
 
@@ -218,8 +244,8 @@ declare coach_name text;
 begin
   if not public.coach_sees(p_client, 'any') then raise exception 'No es tu cliente'; end if;
   if length(trim(p_body)) = 0 then raise exception 'El mensaje está vacío'; end if;
-  select name into coach_name from coaches where user_id = auth.uid();
-  insert into coach_messages (coach_id, client_id, body) values (auth.uid(), p_client, trim(p_body));
+  select name into coach_name from coaches where user_id = public.my_center();
+  insert into coach_messages (coach_id, client_id, body) values (public.my_center(), p_client, trim(p_body));
   insert into scheduled_pushes (user_id, send_at, title, body, tag)
   values (p_client, now(), '💬 ' || coalesce(coach_name, 'Tu entrenador'), left(trim(p_body), 180), 'coach');
 end $$;

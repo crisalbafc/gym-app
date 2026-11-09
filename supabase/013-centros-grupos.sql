@@ -14,15 +14,16 @@ alter table public.coaches add column if not exists modules text[] not null defa
 create or replace function public.update_center(p_name text, p_type text, p_modules text[])
 returns void language plpgsql security definer set search_path = public as $$
 begin
+  if not public.is_center_admin() then raise exception 'Solo el administrador del centro puede cambiar esto'; end if;
   update coaches set center_name = nullif(trim(p_name), ''), center_type = p_type, modules = p_modules
-  where user_id = auth.uid();
+  where user_id = public.my_center();
   if not found then raise exception 'No eres entrenador'; end if;
 end $$;
 
 -- ---------- Grupos ----------
 create table if not exists public.training_groups (
   id uuid primary key default gen_random_uuid(),
-  coach_id uuid not null default auth.uid() references public.coaches(user_id) on delete cascade,
+  coach_id uuid not null default public.my_center() references public.coaches(user_id) on delete cascade,
   name text not null,
   schedule text,
   capacity int not null default 8 check (capacity between 1 and 50),
@@ -50,7 +51,7 @@ alter table public.templates add column if not exists group_routine_id uuid refe
 create table if not exists public.group_sessions (
   id uuid primary key default gen_random_uuid(),
   group_id uuid not null references public.training_groups(id) on delete cascade,
-  coach_id uuid not null default auth.uid() references public.coaches(user_id) on delete cascade,
+  coach_id uuid not null default public.my_center() references public.coaches(user_id) on delete cascade,
   routine_id uuid references public.group_routines(id) on delete set null,
   starts_at timestamptz not null default now(),
   status text not null default 'en_curso' check (status in ('en_curso', 'terminada')),
@@ -75,16 +76,16 @@ alter table public.session_attendance enable row level security;
 
 create or replace function public.owns_group(p_group uuid)
 returns boolean language sql security definer stable set search_path = public as $$
-  select exists (select 1 from training_groups g where g.id = p_group and g.coach_id = auth.uid())
+  select exists (select 1 from training_groups g where g.id = p_group and g.coach_id = public.my_center())
 $$;
 create or replace function public.owns_session(p_session uuid)
 returns boolean language sql security definer stable set search_path = public as $$
-  select exists (select 1 from group_sessions s where s.id = p_session and s.coach_id = auth.uid())
+  select exists (select 1 from group_sessions s where s.id = p_session and s.coach_id = public.my_center())
 $$;
 
 drop policy if exists "coach groups" on public.training_groups;
 create policy "coach groups" on public.training_groups for all
-  using (coach_id = auth.uid()) with check (coach_id = auth.uid());
+  using (coach_id = public.my_center()) with check (coach_id = public.my_center());
 drop policy if exists "member sees own groups" on public.training_groups;
 create policy "member sees own groups" on public.training_groups for select
   using (exists (select 1 from training_group_members m where m.group_id = training_groups.id and m.client_id = auth.uid()));
@@ -102,7 +103,7 @@ create policy "coach routines" on public.group_routines for all
 
 drop policy if exists "coach sessions" on public.group_sessions;
 create policy "coach sessions" on public.group_sessions for all
-  using (coach_id = auth.uid()) with check (coach_id = auth.uid() and public.owns_group(group_id));
+  using (coach_id = public.my_center()) with check (coach_id = public.my_center() and public.owns_group(group_id));
 
 drop policy if exists "coach attendance" on public.session_attendance;
 create policy "coach attendance" on public.session_attendance for all
@@ -120,7 +121,7 @@ create policy "coach session workouts" on public.workouts for all
 create or replace function public.coach_owns_workout(p_workout uuid)
 returns boolean language sql security definer stable set search_path = public as $$
   select exists (select 1 from workouts w join group_sessions s on s.id = w.session_id
-                 where w.id = p_workout and s.coach_id = auth.uid())
+                 where w.id = p_workout and s.coach_id = public.my_center())
 $$;
 drop policy if exists "coach session sets" on public.workout_sets;
 create policy "coach session sets" on public.workout_sets for all
@@ -133,12 +134,12 @@ returns int language plpgsql security definer set search_path = public as $$
 declare r record; n int;
 begin
   select gr.*, g.coach_id into r from group_routines gr join training_groups g on g.id = gr.group_id where gr.id = p_routine;
-  if r.id is null or r.coach_id <> auth.uid() then raise exception 'No es tu grupo'; end if;
+  if r.id is null or r.coach_id <> public.my_center() then raise exception 'No es tu grupo'; end if;
   delete from templates where group_routine_id = p_routine;
   insert into templates (user_id, name, exercise_ids, plan, assigned_by, group_routine_id)
   select m.client_id, r.name,
          coalesce((select array_agg((e->>'exercise_id')::uuid) from jsonb_array_elements(r.plan) e), '{}'),
-         r.plan, auth.uid(), p_routine
+         r.plan, public.my_center(), p_routine
   from training_group_members m where m.group_id = r.group_id;
   get diagnostics n = row_count;
   return n;
@@ -165,7 +166,7 @@ language sql security definer stable set search_path = public as $$
     (select round(100.0 * avg(case when a.present then 1 else 0 end)) from session_attendance a
        join group_sessions s on s.id = a.session_id where s.group_id = g.id and s.starts_at > now() - interval '28 days'),
     (select max(s.starts_at) from group_sessions s where s.group_id = g.id)
-  from training_groups g where g.coach_id = auth.uid()
+  from training_groups g where g.coach_id = public.my_center()
   order by g.name
 $$;
 
