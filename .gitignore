@@ -4,3 +4,4 @@ dist
 public/icon-*.png
 *.tsbuildinfo
 secretos-notificaciones.txt
+dist-pro

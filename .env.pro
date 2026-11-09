@@ -1,0 +1,4 @@
+VITE_SUPABASE_URL=https://vgcmofrvcpvbkamufghj.supabase.co
+VITE_SUPABASE_ANON_KEY=sb_publishable_hcfEZgP16Dvl6HMluYnqkg_ReqaY0Cw
+VITE_VAPID_PUBLIC_KEY=BA9LOZLFUgkY1z0hLGdqZLwvDQoITasmMU06xTld0YlA0f5yWhXdKv8-aOFzXQb3hTOKD3VxOHYAI3s0cW8s-Do
+VITE_EDITION=pro
