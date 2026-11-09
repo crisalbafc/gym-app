@@ -3,6 +3,7 @@ import { CalendarCheck, Clock, Users, Hourglass } from 'lucide-react'
 import { supabase } from '../supabase'
 import { Button, Card, Empty, ErrorText, SectionTitle } from '../components/ui'
 import { errMsg } from '../lib/utils'
+import MyPlan from '../components/MyPlan'
 
 export type ClassItem = {
   id: string; name: string; color: string; starts_at: string; duration_min: number; capacity: number
@@ -28,8 +29,10 @@ export default function Classes() {
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
+  const [tick, setTick] = useState(0)
 
   const load = useCallback(async () => {
+    setTick((t) => t + 1)
     try { setItems(await loadSchedule(new Date(), addDays(today, 14))) }
     catch (e) { setError(errMsg(e)); setItems([]) }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -61,6 +64,7 @@ export default function Classes() {
   return (
     <div>
       <h1 className="text-2xl font-extrabold mb-4">Clases</h1>
+      <MyPlan refresh={tick} />
 
       {mine.length > 0 && (
         <>
