@@ -1,3 +1,4 @@
+import { IS_PRO } from '../edition'
 const CONTACT = (import.meta.env.VITE_CONTACT_EMAIL as string | undefined) || ''
 const UPDATED = '9 de noviembre de 2026'
 
@@ -48,7 +49,7 @@ export default function Privacy() {
       <H>4. Quién puede ver tus datos</H>
       <ul className="list-disc pl-5 space-y-1">
         <li><b>Solo tú</b> ves tu dieta, tu peso, tus medidas y tus entrenos completos.</li>
-        <li>Si te conectas con un <b>entrenador</b> (Ajustes → Mi entrenador), verá solo lo que tú marques: entrenos, dieta, peso y medidas y/o fotos. Podrá dejarte notas, asignarte rutinas, ajustar tus objetivos de dieta y enviarte mensajes. Puedes cambiar lo que compartes o desconectarte cuando quieras.</li>
+        {IS_PRO && <li>Si te conectas con un <b>entrenador</b> (Ajustes → Mi entrenador), verá solo lo que tú marques: entrenos, dieta, peso y medidas y/o fotos. Podrá dejarte notas, asignarte rutinas, ajustar tus objetivos de dieta y enviarte mensajes. Puedes cambiar lo que compartes o desconectarte cuando quieras.</li>}
         <li>Las personas de <b>tus grupos</b> ven tu nombre visible, tus récords por ejercicio (puedes desactivarlo en Ajustes) y las fotos que marques como «La verá tu grupo».</li>
         <li>El creador de la app solo ve cifras globales (número de usuarios, de entrenos…), no tus datos personales.</li>
       </ul>

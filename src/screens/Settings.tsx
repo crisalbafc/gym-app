@@ -16,6 +16,7 @@ import { downloadCsv, errMsg, isoDay, num } from '../lib/utils'
 import { fetchAll } from '../lib/fetchAll'
 import NotificationsCard from '../components/NotificationsCard'
 import CoachCard from '../components/CoachCard'
+import { IS_PRO } from '../edition'
 
 export default function Settings() {
   const { profile, setProfile, session, exercises, go, isAdmin } = useApp()
@@ -126,8 +127,10 @@ export default function Settings() {
 
       <Button className="w-full mt-4" onClick={save}>{saved ? <><Check size={18} /> Guardado</> : 'Guardar cambios'}</Button>
 
-      <SectionTitle>Mi entrenador</SectionTitle>
-      <CoachCard />
+      {IS_PRO && <>
+        <SectionTitle>Mi entrenador</SectionTitle>
+        <CoachCard />
+      </>}
 
       <SectionTitle>Notificaciones</SectionTitle>
       <NotificationsCard />
