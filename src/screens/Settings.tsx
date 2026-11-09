@@ -8,7 +8,7 @@ function LinkRow({ icon, label, onClick }: { icon: React.ReactNode; label: strin
     </button>
   )
 }
-import { supabase } from '../supabase'
+import { supabase, me } from '../supabase'
 import { useApp } from '../App'
 import type { Profile } from '../types'
 import { Button, Card, ErrorText, Input, SectionTitle } from '../components/ui'
@@ -52,17 +52,17 @@ export default function Settings() {
       const exName = Object.fromEntries(exercises.map((e) => [e.id, e.name]))
       const d = isoDay()
       const sets = await fetchAll<{ created_at: string; exercise_id: string; weight: number; reps: number }>(
-        'workout_sets', 'created_at,exercise_id,weight,reps', (q) => q.order('created_at'))
+        'workout_sets', 'created_at,exercise_id,weight,reps', (q) => q.eq('user_id', me).order('created_at'))
       downloadCsv(`entrenos-${d}.csv`, sets.map((s) => ({
         fecha: s.created_at.slice(0, 16).replace('T', ' '), ejercicio: exName[s.exercise_id] || '', kilos: s.weight, reps: s.reps,
       })))
-      const food = await fetchAll<Record<string, unknown>>('food_entries', 'day,meal,name,grams,kcal,protein,carbs,fat', (q) => q.order('day'))
+      const food = await fetchAll<Record<string, unknown>>('food_entries', 'day,meal,name,grams,kcal,protein,carbs,fat', (q) => q.eq('user_id', me).order('day'))
       downloadCsv(`dieta-${d}.csv`, food.map((f) => ({
         fecha: f.day, comida: f.meal, alimento: f.name, gramos: f.grams, kcal: f.kcal, proteina: f.protein, hidratos: f.carbs, grasas: f.fat,
       })))
-      const bw = await fetchAll<Record<string, unknown>>('body_weights', 'day,weight', (q) => q.order('day'))
+      const bw = await fetchAll<Record<string, unknown>>('body_weights', 'day,weight', (q) => q.eq('user_id', me).order('day'))
       downloadCsv(`peso-${d}.csv`, bw.map((b) => ({ fecha: b.day, kilos: b.weight })))
-      const ms = await fetchAll<Record<string, unknown>>('measurements', 'day,waist,chest,arm,leg', (q) => q.order('day'))
+      const ms = await fetchAll<Record<string, unknown>>('measurements', 'day,waist,chest,arm,leg', (q) => q.eq('user_id', me).order('day'))
       downloadCsv(`medidas-${d}.csv`, ms.map((m) => ({ fecha: m.day, cintura: m.waist, pecho: m.chest, brazo: m.arm, pierna: m.leg })))
     } catch (e) {
       setError(errMsg(e))

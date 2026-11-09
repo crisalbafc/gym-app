@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { Home, Dumbbell, Apple, Scale, LineChart, Users, Settings as SettingsIcon } from 'lucide-react'
-import { supabase, isConfigured } from './supabase'
+import { supabase, isConfigured, setMe } from './supabase'
 import type { Exercise, Profile, Tab } from './types'
 import Auth, { NewPassword } from './screens/Auth'
 import Today from './screens/Today'
@@ -80,6 +80,7 @@ function Splash() {
 }
 
 function LoggedIn({ session }: { session: Session }) {
+  setMe(session.user.id)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [tab, setTab] = useState<Tab>(readTab)

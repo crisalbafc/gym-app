@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Trash2, Check } from 'lucide-react'
-import { supabase } from '../supabase'
+import { supabase, me } from '../supabase'
 import type { BodyWeight, Measurement } from '../types'
 import { Button, Card, Empty, ErrorText, Input, SectionTitle, Stepper } from '../components/ui'
 import { errMsg, fmtDay, isoDay, num, round } from '../lib/utils'
@@ -16,8 +16,8 @@ export default function Body() {
 
   const load = useCallback(async () => {
     const [a, b] = await Promise.all([
-      supabase.from('body_weights').select('*').order('day', { ascending: false }).limit(60),
-      supabase.from('measurements').select('*').order('day', { ascending: false }).limit(30),
+      supabase.from('body_weights').select('*').eq('user_id', me).order('day', { ascending: false }).limit(60),
+      supabase.from('measurements').select('*').eq('user_id', me).order('day', { ascending: false }).limit(30),
     ])
     const ws = (a.data as BodyWeight[]) || []
     setWeights(ws)

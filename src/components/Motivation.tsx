@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Trophy, Clock, Dumbbell, ListChecks } from 'lucide-react'
-import { supabase } from '../supabase'
+import { supabase, me } from '../supabase'
 import { useApp } from '../App'
 import type { Exercise, Workout, WorkoutSet } from '../types'
 import { Button, ErrorText, Sheet } from './ui'
@@ -74,7 +74,7 @@ export function FinishSummary({ workout, sets, exById, onDone }: {
     setPrs(null); setPreview(null); setError(null)
     ;(async () => {
       const { data } = await supabase.from('workout_sets').select('exercise_id,weight')
-        .in('exercise_id', exIds).neq('workout_id', workout.id)
+        .eq('user_id', me).in('exercise_id', exIds).neq('workout_id', workout.id)
       const prevMax = new Map<string, number>()
       for (const r of (data as { exercise_id: string; weight: number }[]) || [])
         prevMax.set(r.exercise_id, Math.max(prevMax.get(r.exercise_id) || 0, +r.weight))

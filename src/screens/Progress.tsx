@@ -9,6 +9,7 @@ import { Card, Empty, ErrorText, Segmented } from '../components/ui'
 import { ExercisePicker } from './Workout'
 import { addDays, e1rm, errMsg, fmtDay, isoDay, kg, parseDay, round } from '../lib/utils'
 import { fetchAll } from '../lib/fetchAll'
+import { me } from '../supabase'
 
 type Period = '1m' | '3m' | '1a' | 'todo'
 const PERIOD_DAYS: Record<Period, number | null> = { '1m': 30, '3m': 91, '1a': 365, todo: null }
@@ -45,9 +46,9 @@ export default function Progress() {
       try {
         const [s, w, f] = await Promise.all([
           fetchAll<WorkoutSet>('workout_sets', 'id,workout_id,exercise_id,weight,reps,created_at',
-            (q) => (since ? q.gte('created_at', since) : q).order('created_at')),
-          fetchAll<BodyWeight>('body_weights', 'id,day,weight', (q) => (since ? q.gte('day', since) : q).order('day')),
-          fetchAll<Pick<FoodEntry, 'day' | 'kcal' | 'protein'>>('food_entries', 'day,kcal,protein', (q) => (since ? q.gte('day', since) : q)),
+            (q) => (since ? q.gte('created_at', since) : q).eq('user_id', me).order('created_at')),
+          fetchAll<BodyWeight>('body_weights', 'id,day,weight', (q) => (since ? q.gte('day', since) : q).eq('user_id', me).order('day')),
+          fetchAll<Pick<FoodEntry, 'day' | 'kcal' | 'protein'>>('food_entries', 'day,kcal,protein', (q) => (since ? q.gte('day', since) : q).eq('user_id', me)),
         ])
         setSets(s.map((x) => ({ ...x, weight: +x.weight })))
         setWeights(w.map((x) => ({ ...x, weight: +x.weight })))

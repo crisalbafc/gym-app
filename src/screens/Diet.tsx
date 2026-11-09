@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Plus, Trash2, Search, CopyPlus } from 'lucide-react'
-import { supabase } from '../supabase'
+import { supabase, me } from '../supabase'
 import { useApp } from '../App'
 import type { Food, FoodEntry, Meal } from '../types'
 import { Bar, Button, Card, Empty, ErrorText, Input, Segmented, Sheet } from '../components/ui'
@@ -57,7 +57,7 @@ export default function Diet() {
   const today = isoDay()
 
   const load = useCallback(async () => {
-    const { data, error } = await supabase.from('food_entries').select('*').eq('day', day).order('created_at')
+    const { data, error } = await supabase.from('food_entries').select('*').eq('user_id', me).eq('day', day).order('created_at')
     if (error) setError(errMsg(error))
     setEntries((data as FoodEntry[]) || [])
   }, [day])
@@ -69,7 +69,7 @@ export default function Diet() {
   }
 
   async function copyYesterday() {
-    const { data } = await supabase.from('food_entries').select('meal,name,grams,kcal,protein,carbs,fat').eq('day', addDays(day, -1))
+    const { data } = await supabase.from('food_entries').select('meal,name,grams,kcal,protein,carbs,fat').eq('user_id', me).eq('day', addDays(day, -1))
     if (!data?.length) return alert('El día anterior no tiene comidas apuntadas.')
     if (!confirm(`¿Copiar las ${data.length} comidas del día anterior a este día?`)) return
     const { error } = await supabase.from('food_entries').insert(data.map((d) => ({ ...d, day })))

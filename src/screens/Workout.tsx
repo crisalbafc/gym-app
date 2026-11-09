@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Plus, Copy, Trash2, Trophy, Timer, Search, ChevronDown, ChevronUp, Play, Flag, Save, History, X, Pencil, Target, ArrowUp, ArrowDown } from 'lucide-react'
-import { supabase } from '../supabase'
+import { supabase, me } from '../supabase'
 import { useApp } from '../App'
 import type { Exercise, PlanItem, Template, Workout, WorkoutSet } from '../types'
 import { Button, Card, Empty, ErrorText, Input, SectionTitle, Sheet, Stepper } from '../components/ui'
@@ -39,7 +39,7 @@ export default function WorkoutScreen() {
   const [hype, setHype] = useState(false)
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from('workouts').select('*').is('ended_at', null).order('started_at', { ascending: false }).limit(1)
+    const { data } = await supabase.from('workouts').select('*').eq('user_id', me).is('ended_at', null).order('started_at', { ascending: false }).limit(1)
     setActive((data?.[0] as Workout) || null)
   }, [])
   useEffect(() => { load() }, [load])
@@ -68,8 +68,8 @@ function Idle({ onStarted }: { onStarted: (w: Workout, fresh: boolean) => void }
 
   const load = useCallback(async () => {
     const [t, h] = await Promise.all([
-      supabase.from('templates').select('*').order('created_at'),
-      supabase.from('workouts').select('*, workout_sets(*)').not('ended_at', 'is', null).order('started_at', { ascending: false }).limit(30),
+      supabase.from('templates').select('*').eq('user_id', me).order('created_at'),
+      supabase.from('workouts').select('*, workout_sets(*)').eq('user_id', me).not('ended_at', 'is', null).order('started_at', { ascending: false }).limit(30),
     ])
     setTemplates((t.data as Template[]) || [])
     setHistory((h.data as (Workout & { workout_sets: WorkoutSet[] })[]) || [])
@@ -354,7 +354,7 @@ function ExerciseCard({ exercise, workoutId, sets, onAdd, onDelete, onRemove, ta
   useEffect(() => {
     (async () => {
       const { data } = await supabase.from('workout_sets').select('*')
-        .eq('exercise_id', exercise.id).neq('workout_id', workoutId)
+        .eq('user_id', me).eq('exercise_id', exercise.id).neq('workout_id', workoutId)
         .order('created_at', { ascending: false }).limit(30)
       const rows = (data as WorkoutSet[]) || []
       const lastWorkout = rows[0]?.workout_id

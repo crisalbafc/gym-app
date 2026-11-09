@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Dumbbell, Apple, Scale, Trophy, ChevronRight, Users } from 'lucide-react'
-import { supabase } from '../supabase'
+import { supabase, me } from '../supabase'
 import { useApp } from '../App'
 import type { FoodEntry, Meal } from '../types'
 import { Card, SectionTitle } from '../components/ui'
@@ -22,7 +22,7 @@ export default function Today() {
   const [addFood, setAddFood] = useState(false)
 
   async function loadFood() {
-    const { data } = await supabase.from('food_entries').select('*').eq('day', today)
+    const { data } = await supabase.from('food_entries').select('*').eq('user_id', me).eq('day', today)
     setEntries((data as FoodEntry[]) || [])
   }
 
@@ -30,12 +30,12 @@ export default function Today() {
     (async () => {
       const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0)
       const [w, bw, pr, gm] = await Promise.all([
-        supabase.from('workouts').select('id,ended_at,workout_sets(count)').gte('started_at', startOfDay.toISOString()),
-        supabase.from('body_weights').select('weight').eq('day', today).maybeSingle(),
+        supabase.from('workouts').select('id,ended_at,workout_sets(count)').eq('user_id', me).gte('started_at', startOfDay.toISOString()),
+        supabase.from('body_weights').select('weight').eq('user_id', me).eq('day', today).maybeSingle(),
         supabase.rpc('group_recent_prs'),
         supabase.from('group_members').select('group_id', { count: 'exact', head: true }).eq('user_id', profile.id),
       ])
-      const { data: open } = await supabase.from('workouts').select('id').is('ended_at', null).limit(1)
+      const { data: open } = await supabase.from('workouts').select('id').eq('user_id', me).is('ended_at', null).limit(1)
       const ws = (w.data as { ended_at: string | null; workout_sets: { count: number }[] }[]) || []
       setWorkout({
         active: !!open?.length,
