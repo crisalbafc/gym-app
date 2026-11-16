@@ -11,6 +11,7 @@ import { addDays, e1rm, errMsg, fmtDay, isoDay, kg, parseDay, round } from '../l
 import { fetchAll } from '../lib/fetchAll'
 import { me } from '../supabase'
 import CardioProgress from '../components/CardioProgress'
+import { IS_PRO } from '../edition'
 
 type Period = '1m' | '3m' | '1a' | 'todo'
 const PERIOD_DAYS: Record<Period, number | null> = { '1m': 30, '3m': 91, '1a': 365, todo: null }
@@ -201,7 +202,7 @@ export default function Progress() {
             )}
           </Card>
 
-          <CardioProgress since={since} />
+          {!IS_PRO && <CardioProgress since={since} />}
         </div>
       )}
 

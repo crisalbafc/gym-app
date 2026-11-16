@@ -8,6 +8,7 @@ import { e1rm, errMsg, fmtDate, fmtDuration, num, round } from '../lib/utils'
 import { HistoryPhoto } from '../components/WorkoutPhoto'
 import { CardioList, CardioSheet } from '../components/Cardio'
 import { Footprints } from 'lucide-react'
+import { IS_PRO } from '../edition'
 import { FinishSummary, HypeScreen } from '../components/Motivation'
 import { deletePhotoFile } from '../lib/photos'
 import { Camera } from 'lucide-react'
@@ -118,10 +119,12 @@ function Idle({ onStarted }: { onStarted: (w: Workout, fresh: boolean) => void }
       <Button className="w-full h-16 text-lg" onClick={() => start()}>
         <Play size={22} /> Empezar entreno
       </Button>
-      <Button variant="secondary" className="w-full mt-2" onClick={() => setCardio(true)}>
-        <Footprints size={20} /> Apuntar cardio (correr, bici)
-      </Button>
-      <CardioSheet open={cardio} onClose={() => setCardio(false)} onSaved={() => setCardioTick((t) => t + 1)} />
+      {!IS_PRO && <>
+        <Button variant="secondary" className="w-full mt-2" onClick={() => setCardio(true)}>
+          <Footprints size={20} /> Apuntar cardio (correr, bici)
+        </Button>
+        <CardioSheet open={cardio} onClose={() => setCardio(false)} onSaved={() => setCardioTick((t) => t + 1)} />
+      </>}
 
       <SectionTitle right={
         <button onClick={() => setEditing('new')} className="h-9 px-3 rounded-full bg-zinc-800 text-accent text-sm font-semibold flex items-center gap-1">
@@ -155,7 +158,7 @@ function Idle({ onStarted }: { onStarted: (w: Workout, fresh: boolean) => void }
         onDelete={async (t) => { await removeTemplate(t); setEditing(null) }}
       />
 
-      <CardioList refresh={cardioTick} />
+      {!IS_PRO && <CardioList refresh={cardioTick} />}
 
       <SectionTitle>Historial</SectionTitle>
       {history.length === 0 && <Empty>Aquí aparecerán tus entrenos terminados.</Empty>}
