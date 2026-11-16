@@ -6,6 +6,8 @@ import type { Exercise, PlanItem, Template, Workout, WorkoutSet } from '../types
 import { Button, Card, Empty, ErrorText, Input, SectionTitle, Sheet, Stepper } from '../components/ui'
 import { e1rm, errMsg, fmtDate, fmtDuration, num, round } from '../lib/utils'
 import { HistoryPhoto } from '../components/WorkoutPhoto'
+import { CardioList, CardioSheet } from '../components/Cardio'
+import { Footprints } from 'lucide-react'
 import { FinishSummary, HypeScreen } from '../components/Motivation'
 import { deletePhotoFile } from '../lib/photos'
 import { Camera } from 'lucide-react'
@@ -61,6 +63,8 @@ function Idle({ onStarted }: { onStarted: (w: Workout, fresh: boolean) => void }
   const { exercises } = useApp()
   const [templates, setTemplates] = useState<Template[]>([])
   const [editing, setEditing] = useState<Template | 'new' | null>(null)
+  const [cardio, setCardio] = useState(false)
+  const [cardioTick, setCardioTick] = useState(0)
   const [history, setHistory] = useState<(Workout & { workout_sets: WorkoutSet[] })[]>([])
   const [open, setOpen] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -114,6 +118,10 @@ function Idle({ onStarted }: { onStarted: (w: Workout, fresh: boolean) => void }
       <Button className="w-full h-16 text-lg" onClick={() => start()}>
         <Play size={22} /> Empezar entreno
       </Button>
+      <Button variant="secondary" className="w-full mt-2" onClick={() => setCardio(true)}>
+        <Footprints size={20} /> Apuntar cardio (correr, bici)
+      </Button>
+      <CardioSheet open={cardio} onClose={() => setCardio(false)} onSaved={() => setCardioTick((t) => t + 1)} />
 
       <SectionTitle right={
         <button onClick={() => setEditing('new')} className="h-9 px-3 rounded-full bg-zinc-800 text-accent text-sm font-semibold flex items-center gap-1">
@@ -146,6 +154,8 @@ function Idle({ onStarted }: { onStarted: (w: Workout, fresh: boolean) => void }
         onSaved={() => { setEditing(null); load() }}
         onDelete={async (t) => { await removeTemplate(t); setEditing(null) }}
       />
+
+      <CardioList refresh={cardioTick} />
 
       <SectionTitle>Historial</SectionTitle>
       {history.length === 0 && <Empty>Aquí aparecerán tus entrenos terminados.</Empty>}
