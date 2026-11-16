@@ -5,6 +5,8 @@ import { useApp } from '../App'
 import type { Food, FoodEntry, Meal } from '../types'
 import { Bar, Button, Card, Empty, ErrorText, Input, Segmented, Sheet } from '../components/ui'
 import { addDays, errMsg, fmtDay, isoDay, num, round } from '../lib/utils'
+import { IS_PRO } from '../edition'
+import DietPlanner from '../diet/DietPlanner'
 
 export const MEALS: { id: Meal; label: string }[] = [
   { id: 'desayuno', label: 'Desayuno' },
@@ -49,7 +51,20 @@ export function MacroBars({ entries }: { entries: FoodEntry[] }) {
   )
 }
 
+/** Dieta: diario de comidas y (en tu GymLog personal) el plan semanal con recetas y lista de la compra. */
 export default function Diet() {
+  const [view, setView] = useState<'diario' | 'plan'>(() => { try { return (localStorage.getItem('diet-view') as 'plan') || 'diario' } catch { return 'diario' } })
+  const pick = (v: 'diario' | 'plan') => { setView(v); try { localStorage.setItem('diet-view', v) } catch { /* nada */ } }
+  if (IS_PRO) return <DietDiary />
+  return (
+    <div>
+      <div className="mb-4"><Segmented value={view} onChange={pick} options={[{ value: 'diario', label: 'Diario' }, { value: 'plan', label: 'Plan y compra' }]} /></div>
+      {view === 'diario' ? <DietDiary /> : <DietPlanner />}
+    </div>
+  )
+}
+
+function DietDiary() {
   const [day, setDay] = useState(isoDay())
   const [entries, setEntries] = useState<FoodEntry[]>([])
   const [addTo, setAddTo] = useState<Meal | null>(null)
